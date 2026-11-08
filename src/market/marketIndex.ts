@@ -14,6 +14,8 @@ export class MarketIndex {
   /** every key, full names plus unique short names */
   readonly keys: string[];
   readonly priced: number;
+  /** how many items have an NPC shop price */
+  readonly withNpc: number;
 
   private catalogKeyList: string[] | null = null;
   private readonly nearest = new Map<string, string | null>();
@@ -35,6 +37,7 @@ export class MarketIndex {
     }
     this.keys = [...this.byKey.keys()];
     this.priced = this.data.items.filter((it) => it.p).length;
+    this.withNpc = this.data.items.filter((it) => it.npc).length;
   }
 
   get(key: string): MarketItem | null { return this.byKey.get(key) ?? null; }
@@ -50,16 +53,26 @@ export class MarketIndex {
   /** The real name of the item a key is filed under, from the tracker or the game data. */
   knownName(key: string): string | null { return this.byKey.get(key)?.n ?? this.catalog.get(key)?.name ?? null; }
   /** The game-data item a name read off the screen means, if exactly one is that close. */
-  nearestInCatalog(k: string, truncated: boolean): string | null {
-    const memo = `${truncated ? 1 : 0}${k}`;
+  nearestInCatalog(k: string, truncated: boolean, extra = 0): string | null {
+    const memo = `${truncated ? 1 : 0}${extra}${k}`;
     if (!this.nearest.has(memo)) {
       this.catalogKeyList ??= [...this.catalog.keys()];
-      this.nearest.set(memo, findKey(k, truncated, this.catalogKeyList, (x) => x));
+      this.nearest.set(memo, findKey(k, truncated, this.catalogKeyList, (x) => x, extra));
     }
     return this.nearest.get(memo) ?? null;
   }
   /** The same prices, with another catalog. */
   withCatalog(catalog: Catalog): MarketIndex { return new MarketIndex(this.data, catalog); }
+}
+
+/**
+ * What an NPC pays for one of them: a share of its shop price (half, by default), rounded down. Null when no NPC
+ * shop sells it, or when NPC prices are turned off.
+ */
+export function npcSellPrice(mk: MarketItem | null, ratio: number): number | null {
+  if (!mk?.npc || !(ratio > 0)) return null;
+  const v = Math.floor((mk.npc * Math.min(ratio, 100)) / 100);
+  return v > 0 ? v : null;
 }
 
 /** fewer than 5 sales, or copies that sell for very different prices */

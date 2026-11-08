@@ -8,17 +8,37 @@ import { LOCATE_WIDTH, locateShop } from '../vision/locateShop';
 import { listGray, listScale, toRect } from '../vision/preprocess';
 import { $ } from './dom';
 
+/** What the dialog marks: the shop's item list (read for prices) or the area of items whose hovers count. */
+export type AreaKind = 'shop' | 'items';
+
 export interface CalibrationHost {
   grab(): Promise<Grab | null>;
   capturing(): boolean;
   sharingWholeScreen(): boolean;
   framesIn(): number;
   auto(): boolean;
-  region(): Region | null;
+  region(kind: AreaKind): Region | null;
   ocr: Ocr<HTMLCanvasElement> & { load(): Promise<unknown> };
-  save(r: Region): void;
+  save(r: Region, kind: AreaKind): void;
   chime(): void;
 }
+
+const TEXT: Record<AreaKind, { title: string; intro: string; ready: string; none: string; first: string }> = {
+  shop: {
+    title: "Mark the shop's item list",
+    intro: "Open a player shop or hired merchant in the game, then drag a box over the item names and prices. Leave out the item icons and the scroll bar. You only need this if the scanner can't find the list on its own. A marked area stays put, so mark it again after resizing the game.",
+    ready: 'Found the shop list on its own (the box). Press Test read to check it. Saving a box of your own turns automatic finding off.',
+    none: "If it doesn't show the game with a shop open, press Grab in 5 s and switch to the game. Otherwise drag a box over the shop's item names and prices.",
+    first: 'Drag a box over the item list first.',
+  },
+  items: {
+    title: 'Mark the area of items',
+    intro: 'Open your inventory, the trade window or storage in the game, then drag a box over the item slots. While scanning, only tooltips beside this box are counted, so hovering the chat, the map or other windows adds nothing. A marked area stays put, so mark it again after moving the window.',
+    ready: '',
+    none: 'If it does not show the game with the item window open, press Grab in 5 s and switch to the game. Then drag a box over the item slots.',
+    first: 'Drag a box over the item slots first.',
+  },
+};
 
 /** The "Mark shop area" dialog: a still of the screen to drag a box on, and a test read of it. */
 export class Calibration {
@@ -26,6 +46,7 @@ export class Calibration {
   private rect: Region | null = null;
   private drag: { x: number; y: number } | null = null;
   private countdown = false;
+  private kind: AreaKind = 'shop';
 
   constructor(private readonly host: CalibrationHost) {
     const cv = $<HTMLCanvasElement>('calibCanvas');
@@ -44,10 +65,14 @@ export class Calibration {
     $('calibSave').addEventListener('click', () => this.save());
   }
 
-  async open(): Promise<void> {
+  async open(kind: AreaKind = 'shop'): Promise<void> {
+    this.kind = kind;
+    $('hCalib').textContent = TEXT[kind].title;
+    $('calibText').textContent = TEXT[kind].intro;
+    $('calibTest').hidden = kind === 'items';
     $('calib').hidden = false;
-    const r = this.host.region();
-    if (r) this.rect = { ...r };
+    const r = this.host.region(kind);
+    this.rect = r ? { ...r } : null;
     // a shared screen shows this page right now, so give time to switch to the game
     if (this.host.sharingWholeScreen()) await this.grabIn(5);
     else await this.grab();
@@ -75,7 +100,7 @@ export class Calibration {
       this.frame = snapshot(g.frame);
       black = isBlack(g.frame);
       // start from the list the scanner finds on its own, when it finds one
-      if (this.host.auto() || !this.rect) found = locateShop(canvasAdapter.examine(g.frame, LOCATE_WIDTH));
+      if (this.kind === 'shop' && (this.host.auto() || !this.rect)) found = locateShop(canvasAdapter.examine(g.frame, LOCATE_WIDTH));
     } finally { g.done(); }
     if (found) this.rect = found;
     const cv = $<HTMLCanvasElement>('calibCanvas');
@@ -84,9 +109,7 @@ export class Calibration {
     if (black) {
       $('calibOut').innerHTML = 'The picture is black. macOS is blocking the capture: in System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn Chrome off and on, quit Chrome with ⌘Q, reopen it and start again.';
     } else {
-      this.out(found
-        ? 'Found the shop list on its own (the box). Press Test read to check it. Saving a box of your own turns automatic finding off.'
-        : `Got a ${cv.width}×${cv.height} picture. If it doesn't show the game with a shop open, press Grab in 5 s and switch to the game. Otherwise drag a box over the shop's item names and prices.`);
+      this.out(found ? TEXT[this.kind].ready : `Got a ${cv.width}×${cv.height} picture. ${TEXT[this.kind].none}`);
     }
     return true;
   }
@@ -98,7 +121,7 @@ export class Calibration {
     try {
       for (let s = sec; s > 0; s--) {
         btn.textContent = `Grabbing in ${s}…`;
-        this.out(`Switch to the game and open a shop now. The picture is taken in ${s} s, then come back here.`);
+        this.out(`Switch to the game and open ${this.kind === 'shop' ? 'a shop' : 'your inventory'} now. The picture is taken in ${s} s, then come back here.`);
         await new Promise((r) => setTimeout(r, 1000));
       }
     } finally {
@@ -143,8 +166,8 @@ export class Calibration {
 
   private save(): void {
     const r = this.rect;
-    if (!r || r.w < 0.01 || r.h < 0.01) { this.out('Drag a box over the item list first.'); return; }
-    this.host.save({ ...r });
+    if (!r || r.w < 0.01 || r.h < 0.01) { this.out(TEXT[this.kind].first); return; }
+    this.host.save({ ...r }, this.kind);
     this.close();
   }
 }

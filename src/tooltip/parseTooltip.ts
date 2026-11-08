@@ -11,6 +11,9 @@ const STAT_KINDS: readonly [string, string, number][] = [
   ['str', 'STR', 0.5], ['dex', 'DEX', 0.5], ['int', 'INT', 0.5], ['luk', 'LUK', 0.5],
   ['accuracy', 'accuracy', 0.2], ['avoidability', 'avoid', 0.15], ['speed', 'speed', 0.2], ['jump', 'jump', 0.1],
   ['weapondefense', 'weapon def', 0.05], ['magicdefense', 'magic def', 0.05],
+  // the shorter names the item tooltips print: "Weapon Def.: +24", "Evasion: +1", "Critical Rate: +1"
+  ['weapondef', 'weapon def', 0.05], ['magicdef', 'magic def', 0.05], ['evasion', 'avoid', 0.15],
+  ['criticalrate', 'crit rate', 0.3], ['criticaldamage', 'crit dmg', 0.3],
   ['maxhp', 'HP', 0.01], ['maxmp', 'MP', 0.01], ['hp', 'HP', 0.01], ['mp', 'MP', 0.01],
 ];
 
@@ -35,7 +38,8 @@ const toDigits = (s: string) => s.replace(/[Gb]/g, '6').replace(/[Oo]/g, '0').re
  */
 export function statNumbers(value: string): { total: number; base: number } | null {
   // the base can come out as letters ("(ED -2)" for "(60 -2)"); the difference then still tells it
-  const m = toDigits(value).match(/^\s*\+?\s*(\d+)\s*(?:\(\s*([^\s()+-]*)\s*([+-])?\s*(\d+)?\s*\)?)?/);
+  // a "+" is sometimes read as another symbol ("#1" for "+1")
+  const m = toDigits(value.replace(/^[^\w+\-\s]+/, '')).match(/^\s*\+?\s*(\d+)\s*(?:\(\s*([^\s()+-]*)\s*([+-])?\s*(\d+)?\s*\)?)?/);
   if (!m) return null;
   const total = +m[1]!, base = m[2] && /^\d+$/.test(m[2]) ? +m[2] : null, sign = m[3] ?? null, mod = m[4] != null ? +m[4] : null;
   // copies differ from the base by a few points; "(602)" for "(60 2)" is not a base of 602
@@ -48,7 +52,12 @@ export function statNumbers(value: string): { total: number; base: number } | nu
 /** Resolves a name read off the screen: its key, and the real spelling when it is a known item. */
 export type ResolveName = (name: string) => { key: string; known: string | null };
 
-export function parseTooltip(lines: readonly OcrLine[], resolve: ResolveName): TooltipRead | null {
+export interface ParseOptions {
+  /** accept a tooltip that has no stat lines or slots, if its name is a real item's: a scroll, a potion */
+  bare?: boolean;
+}
+
+export function parseTooltip(lines: readonly OcrLine[], resolve: ResolveName, opts: ParseOptions = {}): TooltipRead | null {
   const texts = lines.map((l) => (l.text || '').replace(/[−–—~]/g, '-').trim()).filter(Boolean);
   const firstReq = texts.findIndex((t) => /\bREQ\b/i.test(t));
 
@@ -62,9 +71,13 @@ export function parseTooltip(lines: readonly OcrLine[], resolve: ResolveName): T
       // dropping words with a regex keeps the wide gaps cleanName splits on
       const c = cleanName(t.replace(new RegExp(`^(\\S+\\s+){${drop}}`), ''));
       if (c.name.length < 3 || !/[A-Za-z]{2}/.test(c.name)) continue;
-      const r = resolve(c.name);
-      if (r.known) { key = r.key; name = r.known; known = true; }
-      else if (!name && drop === 0) { key = r.key; name = c.name; }
+      // the bullet before the name can come out as a letter or two: "sLeaf" is "Leaf"
+      for (const cand of [c.name, c.name.replace(/^[a-z]{1,2}(?=[A-Z])/, '')]) {
+        if (known || cand.length < 3) continue;
+        const r = resolve(cand);
+        if (r.known) { key = r.key; name = r.known; known = true; }
+        else if (!name && drop === 0) { key = r.key; name = cand; }
+      }
     }
     if (known) break;
   }
@@ -89,6 +102,8 @@ export function parseTooltip(lines: readonly OcrLine[], resolve: ResolveName): T
     if (!kind || !nums) continue;
     stats.push({ label: kind.label, weight: kind.weight, total: nums.total, base: nums.base, delta: nums.total - nums.base });
   }
-  if (!key || !name || (!stats.length && remaining == null)) return null;
+  if (!key || !name) return null;
+  // a tooltip with no stat lines is an item with none (a scroll, a potion): only when asked, and only for a real item
+  if (!stats.length && remaining == null && !(opts.bare && known)) return null;
   return { key, name, type, stats, remaining };
 }

@@ -1,6 +1,20 @@
 // Shared data shapes. Anything persisted keeps the field names the single-file scanner used,
 // so its Export file imports here unchanged.
 
+/**
+ * How an item's price is read. `cheap` is the shop scanner's: the lowest sensible price, so only
+ * real bargains stand out. `fair` and `greedy` are for appraising what you hold: what it is worth,
+ * and the most you could reasonably ask.
+ */
+export type PriceMode = 'cheap' | 'fair' | 'greedy';
+export type AppraisalMode = Exclude<PriceMode, 'cheap'>;
+
+/** What the appraisal's table is ordered by. `added` is the default: the order the lines were added in. */
+export type AppraisalSortCol = 'added' | 'name' | 'qty' | 'unit' | 'total';
+
+/** What the open shop's table is ordered by. `best` is the default: deals first, then by how far under the usual price. */
+export type ShopSortCol = 'best' | 'name' | 'unit' | 'usual' | 'pct' | 'profit';
+
 export interface Settings {
   /** % under the usual price a listing must be to count as a deal */
   discount: number;
@@ -23,11 +37,26 @@ export interface Settings {
   statPct: number;
   /** stat points one used upgrade slot costs */
   slotWorth: number;
+  /** % of an NPC shop's price that an NPC pays when you sell it the item; 0 ignores NPC prices */
+  npcRatio: number;
+  /** how the open shop's listings are ordered, and which way */
+  shopSort: ShopSortCol;
+  shopSortDir: 1 | -1;
+  /** how the appraisal's lines are ordered, and which way */
+  appraisalSort: AppraisalSortCol;
+  appraisalSortDir: 1 | -1;
+  /** which price the appraisal uses */
+  appraisalMode: AppraisalMode;
+  /** count a hover anywhere, or only near the area you marked */
+  appraisalArea: 'any' | 'marked';
+  /** % of the appraisal's total you offer or ask for taking everything */
+  bulkOffer: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   discount: 25, minProfit: 3000, fee: 3, base: 'median', minSeen: 3, interval: 0.8, sound: true,
   market: 'on', area: 'auto', readStats: 'on', statPct: 8, slotWorth: 1,
+  npcRatio: 50, shopSort: 'best', shopSortDir: 1, appraisalSort: 'added', appraisalSortDir: 1, appraisalMode: 'fair', appraisalArea: 'any', bulkOffer: 100,
 };
 
 /** [time ms, price per unit, units] */
@@ -68,6 +97,8 @@ export interface MarketItem {
   f?: string;
   /** emoji the tracker shows when it has no icon */
   e?: string;
+  /** the lowest price an NPC shop sells it at (what the NPC charges you), when one does */
+  npc?: number;
 }
 
 export interface MarketData {
@@ -128,6 +159,26 @@ export interface TooltipRead {
 }
 export interface StatValue { mult: number; summary: string; points: number; used: number }
 
+/** One line of an appraisal: an item you hold and how many. */
+export interface AppraisalEntry {
+  id: string;
+  key: string;
+  /** as typed or read; the tracker's spelling is used when the item is known */
+  name: string;
+  /** stack size; for throwing stars and bullets, the number of sets */
+  qty: number;
+  /** stats read from a hover tooltip: they scale an equip's price */
+  tip?: TooltipRead;
+  /** a price each typed on this line: it beats every mode */
+  price?: number | null;
+  /** left out of the total */
+  ignored?: boolean;
+  /** a stack added by hovering: its size is not known (the number on a slot is not read), so it counts as 1 until typed */
+  unsure?: boolean;
+}
+
+export interface AppraisalData { entries: AppraisalEntry[] }
+
 export interface Evaluation {
   verdict: Verdict;
   usual: number | null;
@@ -140,6 +191,10 @@ export interface Evaluation {
   profit: number | null;
   /** at or under your buy-under price */
   target: boolean;
+  /** what an NPC pays for one of them, when its shop price is known (the item's price to you is not involved) */
+  npc: number | null;
+  /** a deal only because an NPC pays more for it than it costs: no market involved */
+  npcFlip: boolean;
   /** why a would-be deal shows as "check" */
   why: string;
 }

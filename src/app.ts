@@ -1,3 +1,5 @@
+import { cleanEntries } from './appraisal/entries';
+import { HoverScanner } from './appraisal/hoverScan';
 import { CaptureFailed, ScreenCapture, type Grab } from './capture/screen';
 import { Ticker } from './capture/ticker';
 import type { Engine } from './engine';
@@ -13,13 +15,14 @@ import { fixSetSightings, isPriceBook, mergeBackup, mergeIntoMarket, newItem, pr
 import { Scanner } from './scan/scanner';
 import { ShopSession, type Deal } from './shop/session';
 import { Storage } from './store/storage';
-import { Calibration } from './ui/calibrate';
+import { AppraisalPanel } from './ui/appraisalPanel';
+import { Calibration, type AreaKind } from './ui/calibrate';
 import { $ } from './ui/dom';
 import { Overlay } from './ui/overlay';
 import { Chime } from './ui/sound';
 import {
   bookRowHtml, bookRows, dealLine, dealsHtml, freshDeal, hoverText, iconHtml, marketInfo, overlayHtml,
-  parsePriceLines, rulesSummary, shopMeta, shopRowHtml, sortRows, type BookSort,
+  cleanSort, nextSort, parsePriceLines, rulesSummary, shopMeta, shopRowHtml, sortRows, type BookSort, type ShopSort,
 } from './ui/views';
 import { canvasAdapter, type Frame } from './vision/canvas';
 
@@ -31,7 +34,7 @@ const MACPERM = 'macOS refused the capture. In System Settings → Privacy &amp;
 /** Rules inputs and the settings they edit. */
 const SETTING_INPUTS: Record<string, keyof Settings> = {
   setDiscount: 'discount', setMinProfit: 'minProfit', setFee: 'fee', setBase: 'base', setMarket: 'market', setArea: 'area',
-  setStats: 'readStats', setStatPct: 'statPct', setSlotWorth: 'slotWorth', setMinSeen: 'minSeen', setInterval: 'interval',
+  setStats: 'readStats', setStatPct: 'statPct', setSlotWorth: 'slotWorth', setNpc: 'npcRatio', setMinSeen: 'minSeen', setInterval: 'interval',
 };
 
 /** The page: wires the capture, the scanner and the shop to the controls and the tables. */
@@ -46,9 +49,13 @@ export class App {
   private readonly overlay = new Overlay();
   private readonly chime = new Chime();
   private readonly calibration: Calibration;
+  private readonly appraisal: AppraisalPanel;
+  private readonly hoverScanner: HoverScanner<Frame, HTMLCanvasElement>;
   /** a screenshot picked with "Test with a screenshot" */
   private still: ImageBitmap | null = null;
   private region: Region | null;
+  /** the area marked for the appraisal's hovers */
+  private itemsRegion: Region | null;
   private sort: BookSort = { col: 'last', dir: -1 };
   /** icon addresses that failed to load: show the emoji instead from now on */
   private readonly failedIcons = new Set<string>();
@@ -59,6 +66,15 @@ export class App {
     this.engine = { market: new MarketIndex(this.store.loadMarket()), book, settings: this.store.loadSettings(), now: () => Date.now() };
     pruneOld(book, Date.now());
     this.region = this.store.loadRegion();
+    this.itemsRegion = this.store.loadItemsRegion();
+    this.appraisal = new AppraisalPanel({
+      engine: this.engine, store: this.store, failed: this.failedIcons,
+      region: () => this.itemsRegion,
+      canScan: () => this.capture.active || !!this.still,
+      onMark: () => void this.calibration.open('items'),
+      onScan: (on) => this.scanningChanged(on),
+    });
+    this.hoverScanner = new HoverScanner(canvasAdapter, this.reader, this.appraisal.collector, this.engine);
     this.session = new ShopSession(this.engine, { onDeal: (d) => this.onDeal(d) });
     this.scanner = new Scanner(canvasAdapter, this.reader, this.session, this.engine, { onBook: () => this.saveBook() });
     this.calibration = new Calibration({
@@ -67,15 +83,16 @@ export class App {
       sharingWholeScreen: () => this.capture.sharingWholeScreen(),
       framesIn: () => this.capture.framesIn,
       auto: () => this.auto(),
-      region: () => this.region,
+      region: (kind: AreaKind) => (kind === 'items' ? this.itemsRegion : this.region),
       ocr: this.reader,
-      save: (r) => this.saveRegion(r),
+      save: (r, kind: AreaKind) => (kind === 'items' ? this.saveItemsRegion(r) : this.saveRegion(r)),
       chime: () => this.chime.play(),
     });
   }
 
   start(): void {
     this.wire();
+    this.appraisal.wire();
     const fixed = this.tidyBook();
     if (fixed) $('dataMsg').textContent = fixed;
     this.render();
@@ -107,18 +124,32 @@ export class App {
   }
 
   async scan(force: boolean): Promise<void> {
-    if (this.scanner.busy || !this.reader.ready) return;
-    if (!this.auto() && !this.region) return;
+    const hovers = this.appraisal.scanning, shop = this.auto() || !!this.region;
+    if (this.scanner.busy || this.hoverScanner.busy || !this.reader.ready) return;
+    if (!shop && !hovers) return;
     const g = this.still ? { frame: this.still as Frame, done: () => {} } : await this.capture.grab();
     if (!g) return;
-    let prepared;
+    let prepared, hover;
     try {
-      prepared = this.scanner.prepare(g.frame, {
-        auto: this.auto(), region: this.region, readStats: this.settings.readStats !== 'off', live: !this.still, force,
-      });
+      if (shop) {
+        prepared = this.scanner.prepare(g.frame, {
+          auto: this.auto(), region: this.region, readStats: this.settings.readStats !== 'off', live: !this.still, force,
+        });
+      }
+      // a shop list on screen means a shop is open, and the hovers over it belong to the shop
+      if (hovers && !prepared?.list) hover = this.hoverScanner.prepare(g.frame, { live: !this.still, area: this.appraisal.area() });
     } finally { g.done(); }
-    try { await this.scanner.read(prepared); } catch (e) { console.error(e); }
-    if (this.scanner.lastCrop) this.drawSeen(this.scanner.lastCrop);
+    if (prepared) {
+      try { await this.scanner.read(prepared); } catch (e) { console.error(e); }
+      if (this.scanner.lastCrop) this.drawSeen(this.scanner.lastCrop);
+    }
+    if (hover) {
+      try {
+        const ev = await this.hoverScanner.read(hover);
+        if (ev.kind === 'added' && this.settings.sound) this.chime.tick();
+        this.appraisal.showEvent(ev);
+      } catch (e) { console.error(e); }
+    }
     document.body.dataset.scans = String(this.scanner.scans);
     this.render();
   }
@@ -164,6 +195,7 @@ export class App {
   }
 
   stopCapture(): void {
+    this.appraisal.setScanning(false);
     this.ticker.stop();
     this.capture.stop();
     this.session.close();
@@ -183,6 +215,23 @@ export class App {
     if (!this.auto() && !this.region) await this.calibration.open();
     else await this.scan(true);
     this.refreshStatus();
+  }
+
+  /** Appraisal scanning was turned on or off: the screen is checked now, and the status and overlay follow. */
+  private scanningChanged(on: boolean): void {
+    this.chime.unlock();
+    this.refreshStatus();
+    this.renderOverlay();
+    if (on) void this.scan(false);
+  }
+
+  private saveItemsRegion(r: Region): void {
+    this.itemsRegion = r;
+    this.store.saveItemsRegion(r);
+    this.settings.appraisalArea = 'marked';
+    this.store.saveSettings(this.settings);
+    this.appraisal.setHint('Area saved. Only tooltips beside it are counted now.');
+    this.render();
   }
 
   private saveRegion(r: Region): void {
@@ -228,6 +277,10 @@ export class App {
   private refreshStatus(): void {
     if (!this.capture.active && !this.still) return;
     if (!this.auto() && !this.region) { this.setStatus('busy', '<b>Mark the shop area</b> so the scanner knows where to read.'); return; }
+    if (this.appraisal.scanning && !this.session.open) {
+      this.setStatus('watching', '<b>Scanning hovers.</b> Point at items in the game and they are added to the appraisal.');
+      return;
+    }
     if (this.session.open) {
       const n = this.session.listingCount();
       this.setStatus('shop', `<b>Shop open</b>, ${n} listing${n === 1 ? '' : 's'} read in ${Math.round(this.scanner.ocrMs)} ms`);
@@ -249,6 +302,7 @@ export class App {
     this.renderShop();
     this.renderDeals();
     if (!(document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains('cellinput'))) this.renderBook();
+    this.appraisal.render();
     this.refreshStatus();
     this.renderOverlay();
   }
@@ -261,8 +315,31 @@ export class App {
     img.remove();
   }
 
+  /** How the open shop is ordered, from the saved setting. */
+  private shopSort(): ShopSort { return cleanSort(this.settings.shopSort, this.settings.shopSortDir); }
+
+  private setShopSort(s: ShopSort): void {
+    this.settings.shopSort = s.col;
+    this.settings.shopSortDir = s.dir;
+    this.store.saveSettings(this.settings);
+    this.renderShop();
+    this.renderOverlay();
+  }
+
+  /** Arrows and aria on the shop table's headers, and the way back to the default order. */
+  private renderShopHeaders(): void {
+    const s = this.shopSort();
+    for (const th of document.querySelectorAll<HTMLElement>('#shopTable th.sortable')) {
+      const on = th.dataset.col === s.col;
+      th.innerHTML = (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${s.dir > 0 ? '▲' : '▼'}</span>` : '');
+      th.setAttribute('aria-sort', on ? (s.dir > 0 ? 'ascending' : 'descending') : 'none');
+    }
+    $('shopSortReset').hidden = s.col === 'best';
+  }
+
   private renderShop(): void {
-    const rows = sortRows(this.session.displayRows());
+    this.renderShopHeaders();
+    const rows = sortRows(this.session.displayRows(), this.shopSort());
     const m = this.engine.market;
     const table = $<HTMLTableElement>('shopTable');
     table.tBodies[0]!.innerHTML = rows.map((r) => shopRowHtml(r, m, this.failedIcons)).join('');
@@ -279,7 +356,7 @@ export class App {
       $('dealLabel').textContent = `Deal at ${clock(d.ts)}`;
       $('dealWhat').innerHTML = `${this.icon(d.key)}<span>${esc(l.name)}</span>`;
       $('dealMath').textContent = `${cap(l.listing)}, ${l.why}`;
-      $('dealProfit').innerHTML = l.profit ? `${esc(l.profit)}<small>after fee</small>` : '';
+      $('dealProfit').innerHTML = l.profit ? `${esc(l.profit)}<small>${esc(l.profitNote)}</small>` : '';
     }
   }
 
@@ -310,9 +387,9 @@ export class App {
     if (!this.overlay.win) return;
     const h = this.session.hover;
     this.overlay.render(overlayHtml({
-      open: this.session.open, capturing: this.capture.active, rows: sortRows(this.session.displayRows()),
+      open: this.session.open, capturing: this.capture.active, rows: sortRows(this.session.displayRows(), this.shopSort()),
       deal: freshDeal(this.session, Date.now()), hover: hoverText(h, this.engine), hoverKey: h?.key ?? null,
-    }, this.engine.market, this.failedIcons));
+    }, this.engine.market, this.failedIcons, this.appraisal.overlayHtml()));
   }
 
   private drawSeen(src: HTMLCanvasElement): void {
@@ -353,6 +430,14 @@ export class App {
     });
     this.onFile('fileShot', (f) => this.loadScreenshot(f));
     $('btnClearDeals').addEventListener('click', () => { this.session.clearDeals(); this.render(); });
+
+    // the open shop: click a column to order by it, again to flip; the choice is kept for the next shop
+    for (const th of document.querySelectorAll<HTMLElement>('#shopTable th.sortable')) {
+      const pick = () => this.setShopSort(nextSort(this.shopSort(), th.dataset.col as ShopSort['col']));
+      th.addEventListener('click', pick);
+      th.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    }
+    $('shopSortReset').addEventListener('click', () => this.setShopSort({ col: 'best', dir: 1 }));
 
     // price book
     $('bookSearch').addEventListener('input', () => this.renderBook());
@@ -416,7 +501,7 @@ export class App {
 
     // backup
     $('btnExport').addEventListener('click', () => {
-      const body = JSON.stringify({ version: 1, exported: new Date().toISOString(), db: this.engine.book, settings: this.settings, region: this.region }, null, 1);
+      const body = JSON.stringify({ version: 1, exported: new Date().toISOString(), db: this.engine.book, settings: this.settings, region: this.region, appraisal: this.appraisal.entries() }, null, 1);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
       a.download = `fm-deal-scanner-${new Date().toISOString().slice(0, 10)}.json`;
@@ -426,13 +511,15 @@ export class App {
     });
     this.onFile('fileImport', async (f) => {
       try {
-        const j = JSON.parse(await f.text()) as { db?: unknown; region?: Region | null; settings?: Partial<Settings> };
+        const j = JSON.parse(await f.text()) as { db?: unknown; region?: Region | null; settings?: Partial<Settings>; appraisal?: unknown };
         if (!isPriceBook(j.db)) throw new Error('not a scanner backup');
         const n = mergeBackup(this.engine.book, j.db as PriceBook);
         if (j.region) { this.region = j.region; this.store.saveRegion(j.region); }
         this.tidyBook();
-        this.saveBook(); this.reevaluate(); this.render();
-        $('dataMsg').textContent = `Imported ${n} item${n === 1 ? '' : 's'}.`;
+        this.saveBook(); this.reevaluate();
+        const lines = this.appraisal.importEntries(cleanEntries(j.appraisal));
+        this.render();
+        $('dataMsg').textContent = `Imported ${n} item${n === 1 ? '' : 's'}.` + (lines ? ` Added ${lines} appraisal line${lines === 1 ? '' : 's'}.` : '');
       } catch { $('dataMsg').textContent = 'That file is not a scanner backup.'; }
     });
     this.onFile('fileMarket', async (f) => {
@@ -442,10 +529,10 @@ export class App {
         const kept = this.setMarket(m);
         const tidy = this.tidyBook();
         this.reevaluate(); this.render();
-        $('marketMsg').textContent = `Loaded ${fmt(this.engine.market.priced)} market prices${m.world ? ` for ${m.world}` : ''}.`
+        $('marketMsg').textContent = `Loaded ${fmt(this.engine.market.priced)} market prices${m.world ? ` for ${m.world}` : ''}.` + (this.engine.market.withNpc ? ` ${fmt(this.engine.market.withNpc)} have an NPC shop price.` : '')
           + (tidy ? ` ${tidy}` : '') + (kept ? '' : ' The browser had no room to keep them, so load the file again next time.');
       } catch {
-        $('marketMsg').textContent = "That page has no price table. Save the tracker's page and pick its .html file.";
+        $('marketMsg').textContent = "That page has no price table. On meso.watch, wait until your world's prices show, save the page as Webpage, Complete, and pick that .html file.";
       }
     });
     const wipe = $('btnWipe');
@@ -475,7 +562,7 @@ export class App {
   private async openOverlay(): Promise<void> {
     if (!Overlay.supported()) { $('btnPip').textContent = 'Overlay needs Chrome 116+'; return; }
     try {
-      await this.overlay.open((img) => this.iconFailed(img));
+      await this.overlay.open((img) => this.iconFailed(img), (act) => { if (act === 'scan') this.appraisal.toggleScanning(); });
       this.renderOverlay();
     } catch (e) { console.warn(e); }
   }

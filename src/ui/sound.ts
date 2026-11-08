@@ -9,6 +9,19 @@ export class Chime {
     } catch { /* no audio */ }
   }
 
+  /** A short soft tick: something was added to the appraisal. */
+  tick(): void {
+    const a = this.ctx;
+    if (!a) return;
+    const t = a.currentTime, o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine'; o.frequency.value = 1040;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g).connect(a.destination);
+    o.start(t); o.stop(t + 0.1);
+  }
+
   play(): void {
     const a = this.ctx;
     if (!a) return;

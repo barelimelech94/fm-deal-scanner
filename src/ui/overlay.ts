@@ -7,7 +7,7 @@ export class Overlay {
 
   static supported(): boolean { return 'documentPictureInPicture' in window; }
 
-  async open(onIconError: (img: HTMLImageElement) => void): Promise<Window | null> {
+  async open(onIconError: (img: HTMLImageElement) => void, onAction: (act: string) => void = () => {}): Promise<Window | null> {
     const pip = (window as unknown as { documentPictureInPicture?: { requestWindow(o: { width: number; height: number }): Promise<Window> } }).documentPictureInPicture;
     if (!pip) return null;
     const w = await pip.requestWindow({ width: 380, height: 360 });
@@ -23,6 +23,11 @@ export class Overlay {
     w.document.body.className = 'pip';
     w.document.body.innerHTML = '<div id="pipRoot"></div>';
     w.document.addEventListener('error', (e) => { const t = e.target as Element | null; if (t?.tagName === 'IMG') onIconError(t as HTMLImageElement); }, true);
+    // buttons in the overlay carry data-act; the page handles them
+    w.document.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+      if (b?.dataset.act) onAction(b.dataset.act);
+    });
     w.addEventListener('pagehide', () => { this.win = null; });
     this.win = w;
     return w;

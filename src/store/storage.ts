@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS, type MarketData, type PriceBook, type Region, type Settings } from '../lib/types';
+import { cleanEntries } from '../appraisal/entries';
+import { DEFAULT_SETTINGS, type AppraisalData, type MarketData, type PriceBook, type Region, type Settings } from '../lib/types';
 import { isPriceBook } from '../pricing/priceBook';
 
 /** Same keys as the single-file scanner, so its Export file imports unchanged. */
@@ -33,6 +34,16 @@ export class Storage {
     return m && Array.isArray(m.items) ? m : null;
   }
   saveMarket(m: MarketData): boolean { return this.set('market', m); }
+
+  loadAppraisal(): AppraisalData {
+    const a = this.get<Partial<AppraisalData> | null>('appraisal', null);
+    return { entries: cleanEntries(a?.entries) };
+  }
+  saveAppraisal(a: AppraisalData): boolean { return this.set('appraisal', a); }
+
+  /** the area marked for the appraisal's hovers, apart from the shop's */
+  loadItemsRegion(): Region | null { return this.get<Region | null>('region.items', null); }
+  saveItemsRegion(r: Region): boolean { return this.set('region.items', r); }
 
   loadRegion(): Region | null { return this.get<Region | null>('region.v4', null); }
   saveRegion(r: Region): boolean { return this.set('region.v4', r); }

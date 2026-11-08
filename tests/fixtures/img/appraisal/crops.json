@@ -1,0 +1,158 @@
+{
+ "use-scroll-inventory": {
+  "source": 1,
+  "crop": [
+   880,
+   270,
+   1700,
+   900
+  ],
+  "size": [
+   820,
+   630
+  ]
+ },
+ "equip-pair-inventory": {
+  "source": 2,
+  "crop": [
+   880,
+   270,
+   1700,
+   900
+  ],
+  "size": [
+   820,
+   630
+  ]
+ },
+ "equip-not-worn": {
+  "source": 3,
+  "crop": [
+   880,
+   270,
+   1700,
+   900
+  ],
+  "size": [
+   820,
+   630
+  ]
+ },
+ "equip-extra-points": {
+  "source": 4,
+  "crop": [
+   880,
+   270,
+   1700,
+   900
+  ],
+  "size": [
+   820,
+   630
+  ]
+ },
+ "trade-scroll": {
+  "source": 5,
+  "crop": [
+   640,
+   230,
+   1800,
+   980
+  ],
+  "size": [
+   1160,
+   750
+  ]
+ },
+ "trade-equip": {
+  "source": 6,
+  "crop": [
+   640,
+   230,
+   1800,
+   980
+  ],
+  "size": [
+   1160,
+   750
+  ]
+ },
+ "bright-equip-pair-right": {
+  "source": 7,
+  "crop": [
+   1240,
+   240,
+   2000,
+   700
+  ],
+  "size": [
+   760,
+   460
+  ]
+ },
+ "bright-potion-count": {
+  "source": 8,
+  "crop": [
+   950,
+   300,
+   1480,
+   720
+  ],
+  "size": [
+   530,
+   420
+  ]
+ },
+ "bright-potion-covered": {
+  "source": 9,
+  "crop": [
+   950,
+   300,
+   1480,
+   720
+  ],
+  "size": [
+   530,
+   420
+  ]
+ },
+ "bright-etc-covered": {
+  "source": 10,
+  "crop": [
+   950,
+   300,
+   1480,
+   720
+  ],
+  "size": [
+   530,
+   420
+  ]
+ },
+ "none-inventory-top": {
+  "source": 3,
+  "crop": [
+   900,
+   270,
+   1210,
+   478
+  ],
+  "size": [
+   310,
+   208
+  ]
+ },
+ "none-brick-map": {
+  "source": 7,
+  "crop": [
+   300,
+   200,
+   1200,
+   800
+  ],
+  "size": [
+   900,
+   600
+  ]
+ }
+}

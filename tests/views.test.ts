@@ -3,7 +3,7 @@ import type { RawListing } from '../src/lib/types';
 import { newItem } from '../src/pricing/priceBook';
 import { ShopSession } from '../src/shop/session';
 import {
-  bookRowHtml, bookRows, dealLine, hoverText, iconHtml, overlayHtml, overlayRowHtml, parsePriceLines, rulesSummary, shopMeta, shopRowHtml, sortRows,
+  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, rulesSummary, shopMeta, shopRowHtml, sortRows,
 } from '../src/ui/views';
 import { DEFAULT_SETTINGS } from '../src/lib/types';
 import { catalogOf, engine, NOW } from './helpers/market';
@@ -52,7 +52,7 @@ describe('shop rows', () => {
   it('describes a deal in words', () => {
     const { e, rows } = shop([raw('Dark Guardian', 40000)]);
     expect(dealLine(rows[0]!, e.market)).toEqual({
-      name: 'Dark Guardian', listing: '1 for 40,000', why: 'usual 71,000 (market, 300 sales)', profit: '+28,870',
+      name: 'Dark Guardian', listing: '1 for 40,000', why: 'usual 71,000 (market, 300 sales)', profit: '+28,870', profitNote: 'after fee',
     });
   });
   it('prices a stack per unit and a set of stars as one', () => {
@@ -117,5 +117,80 @@ describe('rulesSummary', () => {
   it('sums up the rules in a line', () => {
     expect(rulesSummary(DEFAULT_SETTINGS)).toBe('25% off, 3,000+ profit, 3% fee');
     expect(rulesSummary({ ...DEFAULT_SETTINGS, market: 'off', area: 'manual' })).toBe('25% off, 3,000+ profit, 3% fee, market prices off, marked area');
+  });
+});
+
+describe('ordering the open shop', () => {
+  // Axe Pole Arm: a deal (33% under, 4,550 profit). Dark Guardian: only 15% under, but 8,870 profit. Traus: 5% under, 1,350.
+  const listings = () => [
+    raw('Traus', 52000), raw('Axe Pole Arm', 10000), raw('Dark Guardian', 60000), raw('Mystery Thing', 5000), raw('Lemona', 20000, { greyed: true }),
+  ];
+  const order = (sort?: Parameters<typeof sortRows>[1]) => {
+    const s = new ShopSession(engine());
+    s.read(listings(), false);
+    return sortRows(s.displayRows(), sort).map((r) => r.name);
+  };
+
+  it('puts deals first by default, whatever they make', () => {
+    expect(order()).toEqual(['Axe Pole Arm', 'Dark Guardian', 'Traus', 'Mystery Thing', 'Lemona']);
+    expect(order(BEST_FIRST)).toEqual(order());
+  });
+
+  it('puts the most profitable first, which is not always the biggest discount', () => {
+    expect(order({ col: 'profit', dir: -1 })).toEqual(['Dark Guardian', 'Axe Pole Arm', 'Traus', 'Mystery Thing', 'Lemona']);
+  });
+
+  it('puts the least profitable first the other way, still leaving unpriced and sold rows last', () => {
+    expect(order({ col: 'profit', dir: 1 })).toEqual(['Traus', 'Axe Pole Arm', 'Dark Guardian', 'Mystery Thing', 'Lemona']);
+  });
+
+  it('orders by price each, usual price, discount and name', () => {
+    expect(order({ col: 'unit', dir: 1 })).toEqual(['Mystery Thing', 'Axe Pole Arm', 'Traus', 'Dark Guardian', 'Lemona']);
+    expect(order({ col: 'usual', dir: -1 })).toEqual(['Dark Guardian', 'Traus', 'Axe Pole Arm', 'Mystery Thing', 'Lemona']);
+    expect(order({ col: 'pct', dir: 1 })).toEqual(['Axe Pole Arm', 'Dark Guardian', 'Traus', 'Mystery Thing', 'Lemona']);
+    expect(order({ col: 'name', dir: 1 })).toEqual(['Axe Pole Arm', 'Dark Guardian', 'Mystery Thing', 'Traus', 'Lemona']);
+    expect(order({ col: 'name', dir: -1 })).toEqual(['Traus', 'Mystery Thing', 'Dark Guardian', 'Axe Pole Arm', 'Lemona']);
+  });
+
+  it('keeps sold rows last and rows with nothing to sort by last, whichever way a column runs', () => {
+    for (const col of ['unit', 'usual', 'pct', 'profit', 'name'] as const) for (const dir of [1, -1] as const) {
+      expect(order({ col, dir }).at(-1), `${col} ${dir}`).toBe('Lemona');
+    }
+    for (const dir of [1, -1] as const) expect(order({ col: 'profit', dir }).at(-2)).toBe('Mystery Thing');
+  });
+
+  it('falls back to deals first when two rows tie', () => {
+    const s = new ShopSession(engine());
+    s.read([raw('Traus', 52000), raw('Traus', 40000)], false);
+    expect(sortRows(s.displayRows(), { col: 'name', dir: 1 }).map((r) => r.price)).toEqual([40000, 52000]);
+  });
+
+  it('sorts the same rows in place, like before', () => {
+    const rows = shop(listings()).rows;
+    expect(sortRows(rows)).toBe(rows);
+  });
+});
+
+describe('choosing the shop order', () => {
+  it('starts a column in its natural direction, and flips it on the next click', () => {
+    expect(nextSort(BEST_FIRST, 'profit')).toEqual({ col: 'profit', dir: -1 });
+    expect(nextSort({ col: 'profit', dir: -1 }, 'profit')).toEqual({ col: 'profit', dir: 1 });
+    expect(nextSort({ col: 'profit', dir: 1 }, 'profit')).toEqual({ col: 'profit', dir: -1 });
+    expect(nextSort({ col: 'profit', dir: -1 }, 'pct')).toEqual({ col: 'pct', dir: 1 });
+    expect(nextSort(BEST_FIRST, 'unit')).toEqual({ col: 'unit', dir: 1 });
+    expect(nextSort(BEST_FIRST, 'usual')).toEqual({ col: 'usual', dir: -1 });
+    expect(nextSort(BEST_FIRST, 'name')).toEqual({ col: 'name', dir: 1 });
+  });
+
+  it('reads a saved choice, and takes the default for anything else', () => {
+    expect(cleanSort('profit', -1)).toEqual({ col: 'profit', dir: -1 });
+    expect(cleanSort('profit', 1)).toEqual({ col: 'profit', dir: 1 });
+    expect(cleanSort('profit', 'down')).toEqual({ col: 'profit', dir: 1 });
+    expect(cleanSort('nope', -1)).toEqual(BEST_FIRST);
+    expect(cleanSort(undefined, undefined)).toEqual(BEST_FIRST);
+  });
+
+  it('is saved with the other settings', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ shopSort: 'best', shopSortDir: 1 });
   });
 });

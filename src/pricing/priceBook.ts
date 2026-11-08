@@ -10,10 +10,10 @@ export const WINDOW_DAYS = 14;
 export const KEEP_DAYS = 30;
 const MAX_SIGHTINGS = 400;
 
-export interface SightingStats { n: number; median: number | null; q25: number | null; low: number | null; last: number | null }
+export interface SightingStats { n: number; median: number | null; q25: number | null; q75: number | null; low: number | null; last: number | null }
 
 export function sightingStats(it: BookItem | null | undefined, now: number): SightingStats {
-  if (!it) return { n: 0, median: null, q25: null, low: null, last: null };
+  if (!it) return { n: 0, median: null, q25: null, q75: null, low: null, last: null };
   const cut = now - WINDOW_DAYS * DAY;
   const recent = (it.s ?? []).filter((e) => e[0] >= cut);
   const xs = recent.map((e) => e[1]).sort((a, b) => a - b);
@@ -21,6 +21,7 @@ export function sightingStats(it: BookItem | null | undefined, now: number): Sig
     n: xs.length,
     median: quantile(xs, 0.5),
     q25: quantile(xs, 0.25),
+    q75: quantile(xs, 0.75),
     low: xs[0] ?? null,
     last: recent.length ? Math.max(...recent.map((e) => e[0])) : null,
   };

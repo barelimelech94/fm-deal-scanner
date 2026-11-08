@@ -14,6 +14,20 @@ const pct = (el: Element | null): number | null => {
 };
 
 /**
+ * The lowest price an NPC shop sells the item at, from its Source chips: "NPC shop|Cutthroat Manny (Kerning City) ·
+ * 16,500 mesos each". That is what the NPC charges you, the base for what it would pay for the item.
+ */
+function npcShopPrice(row: Element): number | null {
+  let best: number | null = null;
+  for (const chip of Array.from(row.querySelectorAll('[data-src-tip^="NPC shop|"]'))) {
+    const m = (chip.getAttribute('data-src-tip') ?? '').match(/(\d[\d,]*)\s*mesos?\s*each/i);
+    const v = m ? parseInt(m[1]!.replace(/,/g, ''), 10) : NaN;
+    if (Number.isFinite(v) && v > 0 && (best == null || v < best)) best = v;
+  }
+  return best;
+}
+
+/**
  * Reads the price table of a page saved from the MesoWatch tracker ("Webpage, Complete").
  * `savedAt` (the file's modified time) supplies the year the page leaves out.
  */
@@ -43,6 +57,8 @@ export function parseTrackerPage(html: string, savedAt: number, parser: DOMParse
     if (f) it.f = f;
     const fallback = r.querySelector('.item-icon img')?.getAttribute('data-fallback');
     if (fallback) it.e = fallback;
+    const npc = npcShopPrice(r);
+    if (npc != null) it.npc = npc;
     items.push(it);
   }
   const world = (doc.querySelector('#world span')?.textContent ?? '').trim();

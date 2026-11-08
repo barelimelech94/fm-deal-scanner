@@ -104,12 +104,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .grid {
   max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; align-items: start;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  grid-template-areas: "shop side" "book book" "data data";
+  grid-template-areas: "shop side" "appr appr" "book book" "data data";
 }
-.a-shop { grid-area: shop; } .a-side { grid-area: side; } .a-book { grid-area: book; } .a-data { grid-area: data; }
+.a-shop { grid-area: shop; } .a-side { grid-area: side; } .a-appr { grid-area: appr; } .a-book { grid-area: book; } .a-data { grid-area: data; }
 .side { display: grid; gap: 16px; align-content: start; min-width: 0; }
 @media (max-width: 1060px) {
-  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "shop" "side" "book" "data"; }
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "shop" "side" "appr" "book" "data"; }
 }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
 .panel.lead { box-shadow: var(--shadow); }
@@ -144,6 +144,8 @@ th.n, td.n { text-align: right; }
 td.name { white-space: normal; min-width: 180px; }
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--ink); }
+th.sortable:focus-visible { outline-offset: -2px; }
+.headtools { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 th .arrow { font-size: .7rem; margin-left: 3px; }
 tbody tr:last-child td { border-bottom: 0; }
 tr.v-deal td { background: var(--deal-bg); }
@@ -152,11 +154,11 @@ tr.v-sold td { color: var(--sold); }
 tr.v-sold .nm-n { text-decoration: line-through; }
 .chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font: 700 .76rem/1.7 var(--f-body); }
 .chip.deal { background: var(--deal); color: var(--on-deal); }
-.chip.fair { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
-.chip.high { background: var(--high-bg); color: var(--high); }
+.chip.fair, .chip.priced { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.chip.high, .chip.unpriced { background: var(--high-bg); color: var(--high); }
 .chip.new { background: var(--new-bg); color: var(--new); }
-.chip.sold { background: var(--panel-2); color: var(--sold); }
-.chip.unsure { background: var(--accent-soft); color: var(--accent); cursor: help; }
+.chip.sold, .chip.ignored { background: var(--panel-2); color: var(--sold); }
+.chip.unsure, .chip.rough { background: var(--accent-soft); color: var(--accent); cursor: help; }
 .pos { color: var(--deal); font-weight: 700; }
 .neg { color: var(--high); }
 .dim { color: var(--muted); }
@@ -198,6 +200,59 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .deals .w { min-width: 0; }
 .deals .p { color: var(--deal); font: 800 1.05rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
 .dealscroll { max-height: 330px; overflow: auto; }
+
+/* Appraisal: the list, then the total and the offer big enough to read off in a trade */
+.aprow { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; margin: 10px 0 12px; }
+.aprow .field { min-width: 150px; }
+.aprow .note { flex: 1 1 260px; align-self: center; }
+#apTable td { vertical-align: top; }
+#apTable td.acts { white-space: nowrap; text-align: right; }
+#apTable .sub { text-align: right; }
+#apTable td.name .sub { text-align: left; }
+tr.ap-ignored td { color: var(--sold); }
+tr.ap-ignored .nm-n { text-decoration: line-through; }
+tr.ap-unpriced td:first-child { box-shadow: inset 3px 0 0 var(--high); }
+@media (max-width: 640px) {
+  /* each line becomes a card: the name over its count, price and total, so nothing scrolls sideways */
+  #apTable thead { display: none; }
+  #apTable, #apTable tbody { display: block; }
+  #apTable tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: start; }
+  #apTable tbody tr:last-child { border-bottom: 0; }
+  #apTable td { display: block; border: 0; padding: 0; min-width: 0; }
+  #apTable td:nth-child(1) { grid-column: 1 / -1; }
+  #apTable td:nth-child(2)::before, #apTable td:nth-child(3)::before, #apTable td:nth-child(4)::before { display: block; font-size: .72rem; color: var(--muted); text-align: left; }
+  #apTable td:nth-child(2)::before { content: "Qty"; }
+  #apTable td:nth-child(3)::before { content: "Each"; }
+  #apTable td:nth-child(4)::before { content: "Total"; text-align: right; }
+  #apTable td:nth-child(4) { text-align: right; font-weight: 700; }
+  #apTable td:nth-child(5) { grid-column: 1 / 3; }
+  #apTable td:nth-child(6) { grid-column: 3; text-align: right; }
+}
+.aprough { color: var(--high); margin-top: 8px; }
+.aptoolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 12px 0 6px; }
+.aptoolbar .field { min-width: 190px; }
+.apstate { align-self: center; padding: 3px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.apstate[data-on="true"] { background: var(--deal-bg); color: var(--deal); border-color: var(--deal); }
+.aphint { margin: 2px 0 8px; }
+.aphint.bad { color: var(--high); }
+.cellinput.unsure { border-color: var(--accent); background: var(--accent-soft); }
+td .sub.warn { color: var(--accent); }
+/* the overlay's appraisal block */
+.pip .apbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.pip .apbar.on { border-color: var(--deal); background: var(--deal-bg); }
+.pip .apbar b { font: 700 .95rem/1.2 var(--f-display); }
+.pip .aptot { font: 800 1.35rem/1.15 var(--f-display); font-variant-numeric: tabular-nums; }
+.pip .aptot small { font: 600 .74rem/1 var(--f-body); color: var(--muted); }
+.pip .apnote { margin: 0 0 6px; font-size: .78rem; color: var(--muted); }
+.pip .apnote.warn { color: var(--high); }
+.aptotals { display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 14px 0 6px; }
+.aptotals > div { display: grid; }
+.aptotals b { font: 800 1.9rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.aptotals small { color: var(--accent); }
+.aptotals small:empty { display: none; }
+.apquote { margin: 4px 0 12px; }
+.apquote output { display: inline-block; padding: 6px 12px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); font-weight: 700; user-select: all; }
+.aphead { margin: 18px 0 6px; font-size: .95rem; }
 
 /* Price book */
 .searchbox { padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); min-width: 0; width: 240px; max-width: 100%; }

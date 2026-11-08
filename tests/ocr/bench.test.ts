@@ -2,10 +2,14 @@
 // crop, prepare, read, parse, match) with the real text reader. Run with `npm run bench`.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RawListing } from '../../src/lib/types';
+import { prepareHover, readHover } from '../../src/appraisal/hover';
 import { Scanner, type Ocr } from '../../src/scan/scanner';
 import { ShopSession } from '../../src/shop/session';
+import { tooltipResolver } from '../../src/tooltip/resolve';
+import { statSig } from '../../src/tooltip/statValue';
 import type { Pixels } from '../../src/vision/pixels';
 import { loadPng, placeOn, scaleBy } from '../helpers/image';
+import { hoverEngine } from '../helpers/hover';
 import { CATALOG, engine } from '../helpers/market';
 import { nodeOcr, pixelsAdapter } from '../helpers/pipeline';
 
@@ -126,4 +130,50 @@ describe('reading stats from tooltips', () => {
       });
     }
   }
+});
+
+/** [item, what its tooltip says as a stat signature]: the screenshots of the Use, Equip and Etc tabs and the trade window. */
+const HOVERS: Record<string, [string, string]> = {
+  'use-scroll-inventory': ['Overall Armor LUK Scroll: Greater', '|'],
+  'trade-scroll': ['Topwear DEF Scroll: Greater', '|'],
+  'equip-pair-inventory': ['Weighted Earrings', 'magic def:22/22;avoid:1/1|5'],
+  'equip-not-worn': ['Yellow Square', 'magic def:22/22;crit dmg:1/1|5'],
+  'equip-extra-points': ['Blue Bamboo Hat', 'INT:3/2;HP:5/5;weapon def:24/24|7'],
+  'trade-equip': ['Lemona', 'INT:1/1;weapon def:3/3;magic def:5/5;crit rate:1/1|5'],
+  'bright-equip-pair-right': ['Green Bamboo Hat', 'DEX:2/2;HP:5/5;weapon def:23/24|7'],
+  'bright-potion-count': ['Red Potion', '|'],
+  'bright-potion-covered': ['Red Potion', '|'],
+  'bright-etc-covered': ['Leaf', '|'],
+};
+
+/**
+ * Hovered tooltips at the game sizes where the text is legible (a game pixel of one screen pixel or more).
+ * A tooltip read as another item would price the wrong thing, so that is held to a stricter bar than a
+ * stat misread, which only nudges the price.
+ */
+describe('reading hovered tooltips', () => {
+  it('reads the item right at every size, and its stats at most sizes, never as another item', async () => {
+    const e = hoverEngine();
+    let total = 0, named = 0, exact = 0, other = 0;
+    const report: string[] = [];
+    for (const [file, [name, sig]] of Object.entries(HOVERS)) {
+      for (const f of [0.75, 1, 1.25, 1.5]) {
+        const frame = f === 1 ? loadPng(`appraisal/${file}.png`) : scaleBy(loadPng(`appraisal/${file}.png`), f);
+        const crop = prepareHover(pixelsAdapter, frame);
+        total++;
+        if (!crop) { report.push(`${file} at ${f}: no tooltip found`); continue; }
+        const { tip, lines } = await readHover(ocr, crop, tooltipResolver(e));
+        if (tip?.name === name) { named++; if (statSig(tip) === sig) exact++; else report.push(`${file} at ${f}: stats ${statSig(tip)}, wanted ${sig}`); }
+        else { if (tip) other++; report.push(`${file} at ${f}: read ${tip ? tip.name : 'nothing'}\n    ${lines.join('\n    ')}`); }
+      }
+    }
+    console.log(`tooltips: ${named}/${total} named right, ${exact}/${total} with stats right, ${other} as another item${report.length ? '\n' + report.join('\n') : ''}`);
+    expect(named / total).toBeGreaterThanOrEqual(0.97);
+    expect(exact / total).toBeGreaterThanOrEqual(0.8);
+    expect(other / total).toBeLessThanOrEqual(0.02);
+  });
+
+  it('finds nothing to read where no tooltip shows', () => {
+    for (const file of ['none-brick-map', 'none-inventory-top']) expect(prepareHover(pixelsAdapter, loadPng(`appraisal/${file}.png`))).toBeNull();
+  });
 });
