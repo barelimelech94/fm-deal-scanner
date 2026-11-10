@@ -28,9 +28,9 @@ export interface HoverScanOptions {
 
 /** One pass over a frame for the appraisal: find the hovered tooltip, read it, and hand the item to the collector. */
 export class HoverScanner<F, I> {
-  busy = false;
   /** for troubleshooting: what the reader saw last */
   lastLines: string[] = [];
+  lastCrop: I | null = null;
 
   constructor(
     private readonly adapter: FrameAdapter<F, I>,
@@ -47,14 +47,16 @@ export class HoverScanner<F, I> {
     return { crop, spot: { x: crop.box.px.x, y: crop.box.px.y, pitch: (crop.side ?? 92) * SLOT_PER_ICON } };
   }
 
-  /** The slow part: reads the tooltip and puts the item on the appraisal. */
-  async read(p: HoverPrep<I>): Promise<HoverEvent> {
-    this.busy = true;
-    try {
-      const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
-      this.lastLines = lines;
-      return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
-    } finally { this.busy = false; }
+  /**
+   * The slow part: reads the tooltip and puts the item on the appraisal. `keep` is asked once the reading is done:
+   * when it says no (the read is no longer wanted), nothing is added and the answer is null.
+   */
+  async read(p: HoverPrep<I>, keep: () => boolean = () => true): Promise<HoverEvent | null> {
+    const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
+    if (!keep()) return null;
+    this.lastLines = lines;
+    this.lastCrop = p.crop.image;
+    return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
   }
 
   async scan(frame: F, o: HoverScanOptions): Promise<HoverEvent | null> {

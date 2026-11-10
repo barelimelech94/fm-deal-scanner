@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest';
 import type { OcrLine } from '../src/lib/types';
 import { cleanName, isGreyed, parseLines, priceGap, PRICE_RE } from '../src/listing/parseListing';
 import { parseTooltip, statKind, statNumbers, type ResolveName } from '../src/tooltip/parseTooltip';
-import { slotsForType, statSig, statValue } from '../src/tooltip/statValue';
+import { hasStats, slotsForType, statSig, statValue } from '../src/tooltip/statValue';
 import { resolveKey } from '../src/market/matching';
 import { FIXTURES } from './helpers/image';
-import { CATALOG, market } from './helpers/market';
+import { CATALOG, FACTS, market } from './helpers/market';
 
 const lines = (name: string): OcrLine[] => JSON.parse(readFileSync(join(FIXTURES, 'ocr', `${name}.lines.json`), 'utf8')) as OcrLine[];
 const line = (text: string, confidence = 95): OcrLine => ({ text, confidence });
@@ -159,8 +159,15 @@ describe('parseTooltip', () => {
   it('reads stat lines the reader garbled', () => {
     const t = parseTooltip([line('al* Axe Pole Arm'), line('FER STR : 75'), line('+ Attack Speed: Slow'),
       line('N Wieapon Attack: +62 (0 +2)'), line('#& Femaining Enhancements: 7')], resolve)!;
-    expect(t.stats).toEqual([{ label: 'att', weight: 1, total: 62, base: 60, delta: 2 }]);
+    expect(t.stats).toEqual([{ label: 'att', weight: 1, total: 62, base: 60, delta: 2, printed: { base: 0, diff: 2 } }]);
     expect(t.remaining).toBe(7);
+  });
+
+  it('keeps the bracket as printed when it disagrees with the total', () => {
+    const t = parseTooltip([line('Traus'), line('REQ LEV: 40'), line('Weapon Attack: +68 (60 -2)'), line('Weapon Attack: +62 (60 +2)'),
+      line('Weapon Attack: +62 (60 -2)')], resolve)!;
+    // the second agrees; the third differs only by its sign, which the reader often gets wrong
+    expect(t.stats.map((s) => s.printed)).toEqual([{ base: 60, diff: -2 }, undefined, undefined]);
   });
 
   it('reads a stat line whose colon the reader lost', () => {
@@ -268,6 +275,40 @@ describe('statValue', () => {
     expect(statValue(tip([['att', 1, 60, 60]], 7, 'Ring'), { ...opts, maxSlotsSeen: 9 }).used).toBe(2);
   });
 
+  describe("with the game data's facts about the item", () => {
+    const traus = FACTS.get(1302012)!;
+    const read = (stat: string) => parseTooltip([line('Traus'), line('REQ LEV: 40'), line(stat), line('Remaining Enhancements: 7')], resolve)!;
+
+    it('takes the base from the game data, so the tooltip only has to give the total', () => {
+      // the base came out as letters and nothing else tells it: the old rules call that average
+      const t = read('Weapon Attack: +62 (ED)');
+      expect(statValue(t, opts)).toMatchObject({ points: 0, summary: 'average stats, 7 slots left' });
+      const v = statValue(t, { ...opts, fact: traus });
+      expect(v).toMatchObject({ points: 2, used: 0, summary: '+2 att, 7 slots left' });
+      expect(v.mult).toBeCloseTo(1.16);
+    });
+
+    it('counts a stat the item has no base for in full', () => {
+      expect(statValue(tip([['att', 1, 60, 60], ['STR', 0.5, 3, 3]], 7), { ...opts, fact: traus }).summary).toBe('+3 STR, 7 slots left');
+    });
+
+    it('takes the slots from the game data, over the type and the most ever seen', () => {
+      const v = statValue(tip([['att', 1, 62, 60]], 5, ''), { ...opts, fact: traus });
+      expect(v).toMatchObject({ used: 2, summary: '+2 att, 2 of 7 slots used' });
+      expect(statValue(tip([['att', 1, 60, 60]], 7, 'Overall'), { ...opts, maxSlotsSeen: 9, fact: traus }).used).toBe(0);
+      // the game data gives no slot count: the type and the most seen still tell
+      expect(statValue(tip([['att', 1, 60, 60]], 7, 'Ring'), { ...opts, maxSlotsSeen: 9, fact: { ...traus, slots: null } }).used).toBe(2);
+    });
+
+    it("trusts the bracket's base and difference over a total that disagrees with them", () => {
+      // "+68 (60 -2)": the game printed 60 − 2, so the total is 58
+      expect(statValue(read('Weapon Attack: +68 (60 -2)'), { ...opts, fact: traus }).summary).toBe('−2 att, 7 slots left');
+      // a bracket whose base is not the item's was misread itself: the total stands
+      expect(statValue(read('Weapon Attack: +62 (0 +2)'), { ...opts, fact: traus }).summary).toBe('+2 att, 7 slots left');
+      expect(statValue(read('Weapon Attack: +62 (60 -2)'), { ...opts, fact: traus }).summary).toBe('+2 att, 7 slots left');
+    });
+  });
+
   it('stays within a quarter and three times the usual price', () => {
     expect(statValue(tip([['att', 1, 20, 60]], 0), opts).mult).toBe(0.25);
     expect(statValue(tip([['att', 1, 99, 60]], 7), opts).mult).toBe(3);
@@ -276,5 +317,12 @@ describe('statValue', () => {
   it('names a copy by its stats', () => {
     expect(statSig(tip([['att', 1, 62, 60]], 7))).toBe('att:62/60|7');
     expect(statSig(tip([['att', 1, 62, 60]], null))).toBe('att:62/60|');
+  });
+
+  it('knows an equip from a stack by its tooltip: stat lines or upgrade slots read', () => {
+    expect(hasStats(tip([['INT', 0.5, 3, 2]], 7))).toBe(true);
+    expect(hasStats(tip([], 5))).toBe(true);
+    expect(hasStats(tip([], null))).toBe(false);
+    expect(hasStats(null)).toBe(false);
   });
 });

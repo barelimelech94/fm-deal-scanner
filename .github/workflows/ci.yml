@@ -21,8 +21,30 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Item names for pictures (maplestory.io)
+      # the game data changes rarely: fetched once a week, or when the script changes
+      - name: Week of the year
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Restore game data
+        id: gamedata
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            public/items.json
+            public/equips.json
+          key: gamedata-${{ hashFiles('scripts/fetch-items.ts', 'scripts/equips.ts', 'src/icons.ts', 'src/market/catalog.ts', 'src/market/equipFacts.ts') }}-${{ steps.week.outputs.week }}
+      - name: Item names for pictures, equip facts (maplestory.io)
+        if: steps.gamedata.outputs.cache-hit != 'true'
         run: npm run items
+      # saved only when both files arrived, so a failed fetch is tried again on the next push
+      - name: Save game data
+        if: steps.gamedata.outputs.cache-hit != 'true' && hashFiles('public/items.json') != '' && hashFiles('public/equips.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            public/items.json
+            public/equips.json
+          key: ${{ steps.gamedata.outputs.cache-primary-key }}
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests

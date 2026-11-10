@@ -1,7 +1,9 @@
 import type { Engine } from '../../src/engine';
 import { DEFAULT_SETTINGS, type MarketItem, type PriceBook, type Settings } from '../../src/lib/types';
 import { parseCatalog, type Catalog } from '../../src/market/catalog';
+import { parseEquipFacts, type EquipFacts } from '../../src/market/equipFacts';
 import { MarketIndex } from '../../src/market/marketIndex';
+import EQUIPS_SAMPLE from '../fixtures/equips.sample.json' with { type: 'json' };
 
 /** Synthetic tracker items covering the cases the logic distinguishes. */
 export const ITEMS: MarketItem[] = [
@@ -18,7 +20,7 @@ export const ITEMS: MarketItem[] = [
   { id: 'basil:02049100', n: 'AP Reset Scroll', c: 'Scrolls', p: 5000000, s: 30, d: 0, w: 0 },
   { id: 'basil:02049101', n: 'SP Reset Scroll', c: 'Scrolls', p: 4000000, s: 30, d: 0, w: 0 },
   { id: 'basil:01082003', n: 'Lemona', c: 'Equips', p: 21000, s: 50, d: 0, w: 0 },
-  { id: 'basil:01072044', n: 'Bronze Chain Boots', c: 'Equips', p: 12000, s: 60, d: 0, w: 0 },
+  { id: 'basil:01072075', n: 'Bronze Chain Boots', c: 'Equips', p: 12000, s: 60, d: 0, w: 0 },
   { id: 'basil:01102000', n: 'Unsold Cape', c: 'Equips', p: null, s: 0, d: null, w: null },
   { id: 'cash:01702048', n: 'Soft Chocolate Fondue Scepter', c: 'Cash Shop', p: 2849999, s: 12, d: 0, w: 0 },
 ];
@@ -34,11 +36,15 @@ export const CATALOG = catalogOf([
   [1082002, 'Work Gloves'], [1302000, 'Sword'], [1040002, 'White Undershirt'], [1442000, 'Axe'],
 ]);
 
+/** The game data's facts about a few equips (tests/fixtures/equips.sample.json), as the site loads them. */
+export const FACTS: EquipFacts = parseEquipFacts(EQUIPS_SAMPLE);
+
 export const NOW = Date.UTC(2026, 10, 4, 12, 0, 0);
 
-export function engine(over: { book?: PriceBook; settings?: Partial<Settings>; items?: MarketItem[]; now?: () => number } = {}): Engine {
+export function engine(over: { book?: PriceBook; settings?: Partial<Settings>; items?: MarketItem[]; now?: () => number; facts?: EquipFacts } = {}): Engine {
   return {
     market: market(over.items),
+    facts: over.facts ?? new Map(),
     book: over.book ?? { items: {} },
     settings: { ...DEFAULT_SETTINGS, ...over.settings },
     now: over.now ?? (() => NOW),

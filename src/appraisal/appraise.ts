@@ -1,14 +1,12 @@
-import type { Engine } from '../engine';
-import type { AppraisalEntry, AppraisalMode, AppraisalSortCol, StatValue, UsualSource } from '../lib/types';
-import { isSetItem, npcSellPrice } from '../market/marketIndex';
+import { equipFact, type Engine } from '../engine';
+import type { AppraisalEntry, AppraisalMode, StatValue, UsualSource } from '../lib/types';
+import { isRough, isSetItem, npcSellPrice } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
-import { statValue } from '../tooltip/statValue';
+import { hasStats, statValue } from '../tooltip/statValue';
+import { isEquipItem } from './entries';
 
-/** What the appraisal's modes mean, in words, for the panel. */
-export const APPRAISAL_MODES: Record<AppraisalMode, { label: string; blurb: string }> = {
-  fair: { label: 'Fair', blurb: "the tracker's typical price" },
-  greedy: { label: 'Greedy', blurb: "the higher of the tracker's typical price and the upper quarter of your own sightings" },
-};
+/** The two prices an item can be valued at, as the page names them: the stored values stay 'fair' and 'greedy'. */
+export const MODE_LABEL: Record<AppraisalMode, string> = { fair: 'Market', greedy: 'Asking' };
 
 /** `line` is a price typed on that line of the appraisal; `npc` is what an NPC pays for it, the least it is worth. */
 export type LineSource = UsualSource | 'line' | 'npc';
@@ -22,6 +20,8 @@ export interface AppraisalLine {
   known: boolean;
   /** throwing stars and bullets: one item holding a count, priced per set */
   set: boolean;
+  /** one item (a weapon, an armour piece), not a stack */
+  equip: boolean;
   /** price each (per set for sets), with any stats applied */
   unit: number | null;
   /** what an NPC pays for one, when its shop price is known */
@@ -58,19 +58,19 @@ export function appraiseEntry(e: Engine, entry: AppraisalEntry, mode: AppraisalM
   const set = isSetItem(mk, name);
   const typed = entry.price && entry.price > 0 ? entry.price : null;
   const u = typed != null ? { value: typed, src: 'line' as const, rough: false } : usualPrice(it, mk, e.settings, e.now(), mode);
-  // stats read from a hover tooltip scale an equip's price, and settle a rough market price, as in the shop
+  // stats read from a hover tooltip scale an equip's price, and settle "copies sell for very different prices", as in the shop
   const stats = entry.tip && typed == null
-    ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots })
+    ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, entry.key) })
     : null;
   let unit = u ? u.value * (stats?.mult ?? 1) : null, src: LineSource | null = u?.src ?? null;
-  let rough = !!u?.rough && !stats;
+  let rough = !!u?.rough && isRough(mk, hasStats(entry.tip));
   // an NPC pays its price for any copy, so nothing is worth less: with no market price it is the price, and it lifts
   // a lower one. A price typed on the line stays as typed.
   const npc = set ? null : npcSellPrice(mk, e.settings.npcRatio);
   if (typed == null && npc != null && (unit == null || unit < npc)) { unit = npc; src = 'npc'; rough = true; }
   const total = unit == null ? null : Math.round(unit * entry.qty);
   const tag: LineTag = entry.ignored ? 'ignored' : unit == null ? 'unpriced' : rough ? 'rough' : 'priced';
-  return { entry, name, known: e.market.knownName(entry.key) != null, set, unit, npc, src, stats, total, tag };
+  return { entry, name, known: e.market.knownName(entry.key) != null, set, equip: isEquipItem(e, entry.key, entry.tip), unit, npc, src, stats, total, tag };
 }
 
 /** The whole appraisal: every line priced in `mode`, the total, and the offer at `bulk` percent of it. */
@@ -88,38 +88,29 @@ export function appraise(e: Engine, entries: readonly AppraisalEntry[], mode: Ap
   return { mode, lines, total, rough, unpriced, ignored, kinds, items, bulk, quote: Math.round((total * bulk) / 100) };
 }
 
-export interface AppraisalSort { col: AppraisalSortCol; dir: 1 | -1 }
-export const AS_ADDED: AppraisalSort = { col: 'added', dir: 1 };
-export const APPRAISAL_SORT_COLS: readonly AppraisalSortCol[] = ['added', 'name', 'qty', 'unit', 'total'];
+/**
+ * What to type when you put the line in your store, each: a price typed on the line as it is, else the line's
+ * price each moved by `storeAdjust` percent, in whole mesos (never under 1). A line with no price has none.
+ */
+export function listPrice(line: AppraisalLine, storeAdjust: number): number | null {
+  if (line.unit == null) return null;
+  if (line.src === 'line') return Math.round(line.unit);
+  return Math.max(1, Math.round(line.unit * (1 + storeAdjust / 100)));
+}
 
-/** The way a column starts when first clicked: the most valuable, the biggest stack, the dearest price first. */
-const FIRST_DIR: Record<AppraisalSortCol, 1 | -1> = { added: 1, name: 1, qty: -1, unit: -1, total: -1 };
-
-/** The sort after a click on a column: the same column flips, another starts in its natural direction. */
-export const nextAppraisalSort = (cur: AppraisalSort, col: AppraisalSortCol): AppraisalSort =>
-  col === cur.col ? { col, dir: (-cur.dir) as 1 | -1 } : { col, dir: FIRST_DIR[col] };
-
-/** A saved sort, checked: anything unknown is the order the lines were added in. */
-export const cleanAppraisalSort = (col: unknown, dir: unknown): AppraisalSort =>
-  APPRAISAL_SORT_COLS.includes(col as AppraisalSortCol) ? { col: col as AppraisalSortCol, dir: dir === -1 ? -1 : 1 } : AS_ADDED;
-
-const value = (l: AppraisalLine, col: AppraisalSortCol): number | string | null =>
-  col === 'name' ? l.name : col === 'qty' ? l.entry.qty : col === 'unit' ? l.unit : col === 'total' ? l.total : null;
+/** What everything counted comes to at its List at price: "In your store". Skipped lines and lines with no price add nothing. */
+export function storeTotal(r: AppraisalResult, storeAdjust: number): number {
+  let sum = 0;
+  for (const l of r.lines) {
+    const each = l.tag === 'ignored' ? null : listPrice(l, storeAdjust);
+    if (each != null) sum += each * l.entry.qty;
+  }
+  return sum;
+}
 
 /**
- * The lines in the order asked for, as a new list. Skipped lines stay last, and so do lines with no price when
- * ordering by what they are worth (there is nothing to order them by); ties keep the order the lines were added in.
+ * A stack whose count you still have to type: still the 1 it started at and not typed by you, or holding a hovered
+ * slot whose number was not read. It shows under "need a count". Equips are one item each; skipped lines don't count.
  */
-export function sortLines(lines: readonly AppraisalLine[], sort: AppraisalSort = AS_ADDED): AppraisalLine[] {
-  const at = new Map(lines.map((l, i) => [l, i] as const));
-  const added = (a: AppraisalLine, b: AppraisalLine) => at.get(a)! - at.get(b)!;
-  if (sort.col === 'added') return [...lines];
-  return [...lines].sort((a, b) => {
-    const skipped = (a.tag === 'ignored' ? 1 : 0) - (b.tag === 'ignored' ? 1 : 0);
-    if (skipped) return skipped;
-    const x = value(a, sort.col), y = value(b, sort.col);
-    if (x == null || y == null) return x == null && y == null ? added(a, b) : x == null ? 1 : -1;
-    const d = typeof x === 'string' ? x.localeCompare(y as string) : x - (y as number);
-    return d ? d * sort.dir : added(a, b);
-  });
-}
+export const needsCount = (l: AppraisalLine): boolean =>
+  l.tag !== 'ignored' && !l.equip && (!!l.entry.unsure || (l.entry.qty === 1 && !l.entry.counted));

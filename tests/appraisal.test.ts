@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { appraise, appraiseEntry, AS_ADDED, cleanAppraisalSort, nextAppraisalSort, sortLines } from '../src/appraisal/appraise';
+import { appraise, appraiseEntry, listPrice, needsCount, storeTotal } from '../src/appraisal/appraise';
 import { addEntry, cleanEntries, clampQty, entryFor, MAX_QTY, parseAppraisalLines } from '../src/appraisal/entries';
-import { quoteFull, quoteShort } from '../src/appraisal/quote';
+import { offerText, storePricesText } from '../src/appraisal/quote';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type TooltipRead } from '../src/lib/types';
+import { sanitizeSettings } from '../src/settings/schema';
 import { Storage } from '../src/store/storage';
-import { AppraisalPanel } from '../src/ui/appraisalPanel';
-import { engine, NOW } from './helpers/market';
+import { InventoryView } from '../src/ui/inventoryView';
+import { engine, FACTS, ITEMS, NOW } from './helpers/market';
 
 const e = engine({ settings: { appraisalMode: 'fair' } });
 const entry = (name: string, qty = 1, o: Partial<AppraisalEntry> = {}): AppraisalEntry => ({ ...entryFor(e, name, qty), ...o });
@@ -55,13 +56,29 @@ describe('appraise', () => {
     expect(appraiseEntry(e, entry('Traus', 1, { price: 1000, tip: trausTip }), 'fair')).toMatchObject({ unit: 1000, stats: null });
   });
 
-  it('applies hovered stats like the shop does, and they settle a rough price', () => {
+  it('applies hovered stats like the shop does', () => {
     const l = appraiseEntry(e, entry('Traus', 1, { tip: trausTip }), 'fair');
     expect(l).toMatchObject({ unit: 46200, total: 46200, tag: 'priced' });   // 55,000 × 0.84
     expect(l.stats?.summary).toBe('−2 att, 7 slots left');
-    expect(appraiseEntry(e, entry('Korean Fan'), 'fair').tag).toBe('rough');
-    const fanTip: TooltipRead = { key: 'korean fan', name: 'Korean Fan', type: 'Fan', remaining: 7, stats: [] };
-    expect(appraiseEntry(e, entry('Korean Fan', 1, { tip: fanTip }), 'fair').tag).toBe('priced');
+  });
+
+  it('lets hovered stats settle "copies sell for very different prices" only, as the shop does', () => {
+    /** Traus with the tracker's flags: `w` copies sell for very different prices, `l` fewer than 5 sales. */
+    const flagged = (f: string) => engine({ settings: { appraisalMode: 'fair' }, items: ITEMS.map((it) => (it.n === 'Traus' ? { ...it, f } : it)) });
+    const tag = (f: string, tip?: TooltipRead) => appraiseEntry(flagged(f), entry('Traus', 1, tip && { tip }), 'fair').tag;
+    expect(['w', 'l', 'lw'].map((f) => tag(f))).toEqual(['rough', 'rough', 'rough']);
+    expect(['w', 'l', 'lw'].map((f) => tag(f, trausTip))).toEqual(['priced', 'rough', 'rough']);
+    const blank: TooltipRead = { ...trausTip, stats: [], remaining: null };   // an equip whose tooltip showed nothing to read
+    expect(tag('w', blank)).toBe('rough');
+    expect(appraise(flagged('l'), [entry('Traus', 1, { tip: trausTip }), entry('Lemona')], 'fair')).toMatchObject({ total: 46200 + 21000, rough: 46200 });
+  });
+
+  it("reads the base and the slots from the game data when it has the item's", () => {
+    const tip: TooltipRead = { key: 'traus', name: 'Traus', type: '', remaining: 7, stats: [{ label: 'att', weight: 1, total: 58, base: 58, delta: 0 }] };
+    expect(appraiseEntry(e, entry('Traus', 1, { tip }), 'fair').stats?.summary).toBe('average stats, 7 slots left');
+    const l = appraiseEntry(engine({ settings: { appraisalMode: 'fair' }, facts: FACTS }), entry('Traus', 1, { tip }), 'fair');
+    expect(l.stats?.summary).toBe('−2 att, 7 slots left');
+    expect(l.unit).toBe(46200);
   });
 
   it('uses your typed price from the price book, in every mode', () => {
@@ -129,23 +146,112 @@ describe('entries', () => {
   });
 });
 
-describe('quote', () => {
+describe('the offer and the store prices, as copied', () => {
   const lines = [entry('Gloves Attack Scroll: Greater', 2), entry('Lemona'), entry('Mystery Thing', 3), entry('Traus', 1, { ignored: true })];
 
-  it('is one line for the chat', () => {
-    expect(quoteShort(appraise(e, lines, 'fair', 100))).toBe('3 kinds / 6 items = 881,000 mesos (1 not priced)');
-    expect(quoteShort(appraise(e, lines, 'fair', 90))).toBe('3 kinds / 6 items = 792,900 mesos (1 not priced)');
-    expect(quoteShort(appraise(e, [entry('Lemona')], 'fair'))).toBe('1 kind / 1 item = 21,000 mesos');
-    expect(quoteShort(appraise(e, [], 'fair'))).toBe('Nothing to appraise yet');
+  it('offers everything in one line for the chat', () => {
+    expect(offerText(appraise(e, lines, 'fair', 100))).toBe('6 items for 881,000 mesos (1 not priced)');
+    expect(offerText(appraise(e, lines, 'fair', 90))).toBe('6 items for 792,900 mesos (1 not priced)');
+    expect(offerText(appraise(e, [entry('Lemona')], 'fair'))).toBe('1 item for 21,000 mesos');
+    expect(offerText(appraise(e, [], 'fair'))).toBe('No items yet');
   });
 
-  it('lists every counted line for pasting', () => {
-    expect(quoteFull(appraise(e, lines, 'fair', 100))).toBe([
-      'Appraisal (fair prices)', 'Gloves Attack Scroll: Greater ×2 = 860,000', 'Lemona ×1 = 21,000', 'Mystery Thing ×3 = not priced', 'Total 881,000',
+  it('lists what to type in the store, one line per item in the order added, skipped ones left out', () => {
+    expect(storePricesText(appraise(e, lines, 'fair'), 0)).toBe([
+      'Gloves Attack Scroll: Greater ×2: 430,000', 'Lemona ×1: 21,000', 'Mystery Thing ×3: no price',
     ].join('\n'));
-    expect(quoteFull(appraise(e, lines, 'greedy', 90)).split('\n')).toEqual([
-      'Appraisal (greedy prices, offer 90%)', 'Gloves Attack Scroll: Greater ×2 = 860,000', 'Lemona ×1 = 21,000', 'Mystery Thing ×3 = not priced', 'Total 881,000 · offer 90% = 792,900',
+    expect(storePricesText(appraise(e, lines, 'fair'), 5).split('\n').slice(0, 2)).toEqual(['Gloves Attack Scroll: Greater ×2: 451,500', 'Lemona ×1: 22,050']);
+    expect(storePricesText(appraise(e, [], 'fair'), 0)).toBe('');
+  });
+
+  it('says nothing of appraising anywhere a player reads it', () => {
+    const r = appraise(e, lines, 'greedy', 90);
+    for (const text of [offerText(r), storePricesText(r, 0), offerText(appraise(e, [], 'fair'))]) expect(text).not.toMatch(/apprais|kind/i);
+  });
+});
+
+describe('List at', () => {
+  const line = (name: string, o: Partial<AppraisalEntry> = {}) => appraiseEntry(e, entry(name, 1, o), 'fair');
+
+  it("is the item's price moved by the List at percent, in whole mesos", () => {
+    expect(listPrice(line('Lemona'), 0)).toBe(21000);
+    expect(listPrice(line('Lemona'), 5)).toBe(22050);
+    expect(listPrice(line('Lemona'), -10)).toBe(18900);
+    expect(listPrice(line('Gloves Attack Scroll: Intermediate'), 3)).toBe(1132999);   // 1,099,999 × 1.03 = 1,132,998.97
+    expect(listPrice(line('Tobi Throwing Stars'), 1)).toBe(1868500);
+  });
+
+  it('rounds small prices to whole mesos, never under 1', () => {
+    expect(listPrice(line('Arrows for Bows'), 5)).toBe(5);   // 5.25
+    expect(listPrice(line('Arrows for Bows'), 10)).toBe(6);  // 5.5
+    expect(listPrice(line('Arrows for Bows'), -50)).toBe(3); // 2.5
+    expect(listPrice({ ...line('Arrows for Bows'), unit: 0.4 }, 0)).toBe(1);
+  });
+
+  it('is a price typed on the line as it is, and nothing for a line with no price', () => {
+    expect(listPrice(line('Lemona', { price: 25000 }), 5)).toBe(25000);
+    expect(listPrice(line('Mystery Thing'), 5)).toBeNull();
+    expect(listPrice(line('Mystery Thing', { price: 900 }), 5)).toBe(900);
+  });
+});
+
+describe('the two totals', () => {
+  it('adds the worth at the chosen price, and what the store asks at List at × count', () => {
+    const r = appraise(e, [entry('Lemona', 2), entry('Gloves Attack Scroll: Greater', 3), entry('Mystery Thing', 4), entry('Traus', 1, { ignored: true })], 'fair');
+    expect(r.total).toBe(2 * 21000 + 3 * 430000);
+    expect(storeTotal(r, 0)).toBe(r.total);
+    expect(storeTotal(r, 5)).toBe(2 * 22050 + 3 * 451500);
+    // a typed price is the line's worth and its List at price, unmoved
+    const typed = appraise(e, [entry('Lemona', 2, { price: 30000 }), entry('Mystery Thing', 1, { price: 1000 })], 'fair');
+    expect(typed.total).toBe(61000);
+    expect(storeTotal(typed, 20)).toBe(61000);
+    expect(storeTotal(appraise(e, [], 'fair'), 5)).toBe(0);
+  });
+
+  it('follows the chosen price', () => {
+    const book = { items: { traus: { name: 'Traus', manualRef: null, buyUnder: null, s: seen(80000, 81000, 82000, 83000) } } };
+    const en = engine({ book });
+    const r = (mode: 'fair' | 'greedy') => appraise(en, [entryFor(en, 'Traus', 2)], mode);
+    expect([r('fair').total, storeTotal(r('fair'), 10)]).toEqual([110000, 121000]);
+    expect([r('greedy').total, storeTotal(r('greedy'), 10)]).toEqual([164500, 180950]);
+  });
+});
+
+describe('need a count', () => {
+  const need = (name: string, qty = 1, o: Partial<AppraisalEntry> = {}) => needsCount(appraiseEntry(e, entry(name, qty, o), 'fair'));
+
+  it('is a stack whose count is still the 1 it started at', () => {
+    expect(need('Gloves Attack Scroll: Greater')).toBe(true);
+    expect(need('Mystery Thing')).toBe(true);
+    expect(need('Gloves Attack Scroll: Greater', 3)).toBe(false);
+  });
+
+  it('is a stack holding a hovered slot whose number was not read, whatever its count', () => {
+    expect(need('Gloves Attack Scroll: Greater', 2, { unsure: true })).toBe(true);
+  });
+
+  it('is never an equip, a skipped line, or a count you typed', () => {
+    expect(need('Lemona')).toBe(false);
+    expect(need('Traus')).toBe(false);
+    expect(need('Gloves Attack Scroll: Greater', 1, { ignored: true })).toBe(false);
+    expect(need('Gloves Attack Scroll: Greater', 1, { counted: true })).toBe(false);
+    // an item the tracker doesn't know is an equip when its tooltip had stats
+    expect(need('Odd Sword', 1, { tip: { ...trausTip, key: 'odd sword', name: 'Odd Sword' } })).toBe(false);
+  });
+
+  it('keeps the counted mark through storage', () => {
+    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 3, counted: true }])[0]!.counted).toBe(true);
+    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 3 }])[0]!.counted).toBeUndefined();
+  });
+
+  it('takes a stack saved at 1 as counted, so items saved before the mark existed do not all ask for a count', () => {
+    const saved = cleanEntries([
+      { id: 'a', key: 'red potion', name: 'Red Potion', qty: 1 },
+      { id: 'b', key: 'leaf', name: 'Leaf', qty: 1, unsure: true },   // a hovered slot whose number was not read: still asked
+      { id: 'c', key: 'gloves attack scroll: greater', name: 'Gloves Attack Scroll: Greater', qty: 4 },
     ]);
+    expect(saved.map((x) => x.counted)).toEqual([true, undefined, undefined]);
+    expect(saved.map((x) => needsCount(appraiseEntry(e, x, 'fair')))).toEqual([false, true, false]);
   });
 });
 
@@ -174,12 +280,16 @@ describe('Storage', () => {
   });
 });
 
-describe('AppraisalPanel', () => {
+const VIEW_DEPS = {
+  setScanning: () => false, shown: () => false, version: () => '', capturing: () => false, openPrices() {}, startCapture() {}, overlay() {},
+};
+
+describe('InventoryView', () => {
   const panel = (over: Record<string, unknown>) => {
     const en = engine();
     Object.assign(en.settings, over);
     const st = new Storage(null);
-    return { en, p: new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => null, canScan: () => true, onMark: () => {}, onScan: () => {} }) };
+    return { en, p: new InventoryView({ engine: en, store: st, failed: new Set(), region: () => null, ...VIEW_DEPS }) };
   };
 
   it('starts empty and keeps good settings', () => {
@@ -188,17 +298,10 @@ describe('AppraisalPanel', () => {
     expect(en.settings).toMatchObject({ appraisalMode: 'greedy', bulkOffer: 85 });
   });
 
-  it('falls back to the defaults when saved settings are nonsense', () => {
-    const { en } = panel({ appraisalMode: 'cheap', bulkOffer: NaN });
-    expect(en.settings).toMatchObject({ appraisalMode: DEFAULT_SETTINGS.appraisalMode, bulkOffer: DEFAULT_SETTINGS.bulkOffer });
-    expect(panel({ appraisalMode: 'nope', bulkOffer: -5 }).en.settings).toMatchObject({ appraisalMode: 'fair', bulkOffer: 100 });
-    expect(panel({ appraisalArea: 'everywhere' }).en.settings.appraisalArea).toBe('any');
-  });
-
   it('counts hovers anywhere, or only near the marked area once one is chosen', () => {
     const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.3 };
     const en = engine(), st = new Storage(null);
-    const p = new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => region, canScan: () => true, onMark: () => {}, onScan: () => {} });
+    const p = new InventoryView({ engine: en, store: st, failed: new Set(), region: () => region, ...VIEW_DEPS });
     expect(p.area()).toBeNull();
     en.settings.appraisalArea = 'marked';
     expect(p.area()).toEqual(region);
@@ -216,89 +319,19 @@ describe('AppraisalPanel', () => {
     expect(p.entries().map((x) => [x.name, x.qty])).toEqual([['Lemona', 3], ['Red Potion', 84]]);
   });
 
-  it('starts paused, and scanning needs something to scan', () => {
-    const en = engine(), st = new Storage(null);
-    let on: boolean | null = null;
-    const p = new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => null, canScan: () => false, onMark: () => {}, onScan: (v) => { on = v; } });
-    expect(p.scanning).toBe(false);
-    expect(on).toBeNull();
+  it('starts paused', () => {
+    expect(panel({}).p.scanning).toBe(false);
   });
 });
 
-describe('ordering the lines', () => {
-  // added in this order; Traus is skipped, Mystery Thing has no price
-  const lines = () => appraise(e, [
-    entry('Lemona'), entry('Gloves Attack Scroll: Greater', 2), entry('Mystery Thing', 3), entry('Traus', 1, { ignored: true }),
-    entry('Wolbi Throwing Stars', 10), entry('Gloves Attack Scroll: Intermediate'),
-  ], 'fair').lines;
-  const order = (sort?: Parameters<typeof sortLines>[1]) => sortLines(lines(), sort).map((l) => l.name);
-
-  it('keeps the order the lines were added in by default', () => {
-    expect(order()).toEqual(['Lemona', 'Gloves Attack Scroll: Greater', 'Mystery Thing', 'Traus', 'Wolbi Throwing Stars', 'Gloves Attack Scroll: Intermediate']);
-    expect(order(AS_ADDED)).toEqual(order());
-  });
-
-  it('puts the most valuable first, then the unpriced, then the skipped', () => {
-    expect(order({ col: 'total', dir: -1 })).toEqual(['Gloves Attack Scroll: Intermediate', 'Gloves Attack Scroll: Greater', 'Wolbi Throwing Stars', 'Lemona', 'Mystery Thing', 'Traus']);
-    expect(order({ col: 'total', dir: 1 })).toEqual(['Lemona', 'Wolbi Throwing Stars', 'Gloves Attack Scroll: Greater', 'Gloves Attack Scroll: Intermediate', 'Mystery Thing', 'Traus']);
-  });
-
-  it('orders by name, quantity and price each', () => {
-    expect(order({ col: 'name', dir: 1 })).toEqual(['Gloves Attack Scroll: Greater', 'Gloves Attack Scroll: Intermediate', 'Lemona', 'Mystery Thing', 'Wolbi Throwing Stars', 'Traus']);
-    expect(order({ col: 'name', dir: -1 })).toEqual(['Wolbi Throwing Stars', 'Mystery Thing', 'Lemona', 'Gloves Attack Scroll: Intermediate', 'Gloves Attack Scroll: Greater', 'Traus']);
-    // ties (Lemona and Intermediate are one each) keep the order they were added in
-    expect(order({ col: 'qty', dir: -1 })).toEqual(['Wolbi Throwing Stars', 'Mystery Thing', 'Gloves Attack Scroll: Greater', 'Lemona', 'Gloves Attack Scroll: Intermediate', 'Traus']);
-    expect(order({ col: 'unit', dir: -1 })).toEqual(['Gloves Attack Scroll: Intermediate', 'Gloves Attack Scroll: Greater', 'Lemona', 'Wolbi Throwing Stars', 'Mystery Thing', 'Traus']);
-  });
-
-  it('keeps skipped lines last whichever way a column runs', () => {
-    for (const col of ['name', 'qty', 'unit', 'total'] as const) for (const dir of [1, -1] as const) {
-      expect(order({ col, dir }).at(-1), `${col} ${dir}`).toBe('Traus');
-    }
-  });
-
-  it('leaves the lines it was given alone, and the totals the same in any order', () => {
-    const given = lines();
-    const before = given.map((l) => l.name);
-    sortLines(given, { col: 'total', dir: -1 });
-    expect(given.map((l) => l.name)).toEqual(before);
-    const r = appraise(e, [entry('Lemona'), entry('Gloves Attack Scroll: Greater', 2)], 'fair');
-    expect(sortLines(r.lines, { col: 'total', dir: -1 }).map((l) => l.total)).toEqual([860000, 21000]);
-    expect(r.total).toBe(881000);
-  });
-
-  it('chooses a column: the same one flips, another starts the way that suits it', () => {
-    expect(nextAppraisalSort(AS_ADDED, 'total')).toEqual({ col: 'total', dir: -1 });
-    expect(nextAppraisalSort({ col: 'total', dir: -1 }, 'total')).toEqual({ col: 'total', dir: 1 });
-    expect(nextAppraisalSort({ col: 'total', dir: -1 }, 'name')).toEqual({ col: 'name', dir: 1 });
-    expect(nextAppraisalSort(AS_ADDED, 'qty')).toEqual({ col: 'qty', dir: -1 });
-    expect(nextAppraisalSort(AS_ADDED, 'unit')).toEqual({ col: 'unit', dir: -1 });
-  });
-
-  it('takes the order lines were added in for a saved choice it cannot read', () => {
-    expect(cleanAppraisalSort('total', -1)).toEqual({ col: 'total', dir: -1 });
-    expect(cleanAppraisalSort('total', 'down')).toEqual({ col: 'total', dir: 1 });
-    expect(cleanAppraisalSort('price', -1)).toEqual(AS_ADDED);
-    expect(cleanAppraisalSort(undefined, undefined)).toEqual(AS_ADDED);
-  });
-
-  it('puts the copied list in the same order', () => {
-    const r = appraise(e, [entry('Lemona'), entry('Gloves Attack Scroll: Greater', 2)], 'fair');
-    r.lines = sortLines(r.lines, { col: 'total', dir: -1 });
-    expect(quoteFull(r).split('\n')[1]).toBe('Gloves Attack Scroll: Greater ×2 = 860,000');
-  });
-
-  it('is part of the saved settings, and a panel falls back when they are nonsense', () => {
-    expect(DEFAULT_SETTINGS).toMatchObject({ appraisalSort: 'added', appraisalSortDir: 1 });
-    const mk = (over: Record<string, unknown>) => {
-      const en = engine();
-      Object.assign(en.settings, over);
-      const p = new AppraisalPanel({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, canScan: () => true, onMark: () => {}, onScan: () => {} });
-      p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);
-      return p;
-    };
-    expect(mk({ appraisalSort: 'total', appraisalSortDir: -1 }).result().lines.map((l) => l.name)).toEqual(['Gloves Attack Scroll: Greater', 'Lemona']);
-    expect(mk({ appraisalSort: 'nope', appraisalSortDir: -1 }).sort()).toEqual(AS_ADDED);
-    expect(mk({ appraisalSort: 'nope' }).result().lines.map((l) => l.name)).toEqual(['Lemona', 'Gloves Attack Scroll: Greater']);
+describe('the order of your items', () => {
+  it('is the order they were added in, whatever an old version saved', () => {
+    // an old version's order for your items is dropped on load, and the rest of its settings load
+    const old = sanitizeSettings({ appraisalSort: 'total', appraisalSortDir: -1, bulkOffer: 90 });
+    expect(old).toEqual({ ...DEFAULT_SETTINGS, bulkOffer: 90 });
+    const en = engine({ settings: old });
+    const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, ...VIEW_DEPS });
+    p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);
+    expect(p.result().lines.map((l) => l.name)).toEqual(['Lemona', 'Gloves Attack Scroll: Greater']);
   });
 });

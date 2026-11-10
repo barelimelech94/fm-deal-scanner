@@ -87,11 +87,6 @@ export const SETTINGS: readonly SettingDef[] = [
     ],
   },
   { key: 'shopSortDir', group: 'state', label: 'Shop order direction', help: 'Which way the open shop is ordered.', kind: 'select', options: DIR },
-  {
-    key: 'appraisalSort', group: 'state', label: 'Order your items by', help: "The inventory's column its lines are ordered by.", kind: 'select',
-    options: [{ value: 'added', label: 'As added' }, { value: 'name', label: 'Item' }, { value: 'qty', label: 'Qty' }, { value: 'unit', label: 'Each' }, { value: 'total', label: 'Total' }],
-  },
-  { key: 'appraisalSortDir', group: 'state', label: 'Item order direction', help: 'Which way your items are ordered.', kind: 'select', options: DIR },
 ];
 
 const BY_KEY = new Map(SETTINGS.map((s) => [s.key, s]));

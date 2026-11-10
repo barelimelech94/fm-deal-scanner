@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RawListing, TooltipRead } from '../src/lib/types';
 import { ShopSession, type Deal } from '../src/shop/session';
-import { engine, NOW } from './helpers/market';
+import { engine, FACTS, NOW } from './helpers/market';
 
 const raw = (name: string, price: number, o: Partial<RawListing> = {}): RawListing => ({
   name, truncated: false, nameConf: 95, cy: null, qty: 1, price, greyed: false, unsure: false, ...o,
@@ -323,6 +323,16 @@ describe('stats from tooltips', () => {
     expect(s.applyTooltip(traus(60, 8), 0.5)).toBe(false);
   });
 
+  it("reads the base and the slots from the game data when it has the item's", () => {
+    const tip: TooltipRead = { key: 'traus', name: 'Traus', type: '', remaining: 5, stats: [{ label: 'att', weight: 1, total: 62, base: 62, delta: 0 }] };
+    const plain = setup();
+    plain.s.applyTooltip(tip, 0.5);
+    expect(plain.s.hover!.summary).toBe('average stats, 5 slots left');
+    const { s } = setup({ facts: FACTS });
+    s.applyTooltip(tip, 0.5);
+    expect(s.hover!.summary).toBe('+2 att, 2 of 7 slots used');
+  });
+
   it('shows what was hovered even outside a shop', () => {
     const { s } = setup();
     s.applyTooltip(traus(62), 0.5);
@@ -337,5 +347,53 @@ describe('stats from tooltips', () => {
     e.settings.discount = 10;
     s.reevaluate();
     expect([...s.rows.values()][0]!.verdict).toBe('deal');
+  });
+});
+
+describe('version', () => {
+  it('rises when what the shop shows changes, and not otherwise', () => {
+    const { s } = setup();
+    const v0 = s.version;
+    s.read(SHOP, false);
+    const opened = s.version;
+    expect(opened).toBeGreaterThan(v0);
+    // the same list again: nothing changed
+    s.read(SHOP, false);
+    s.read(SHOP, false);
+    expect(s.version).toBe(opened);
+    // one more copy of a listing
+    s.read([...SHOP, raw('Lemona', 19999)], false);
+    expect(s.version).toBeGreaterThan(opened);
+  });
+
+  it('does not rise for a live read still waiting for its twin, or one empty read', () => {
+    const { s } = setup();
+    s.read(SHOP, true);
+    expect(s.version).toBe(0);
+    s.read(SHOP, true);
+    const open = s.version;
+    s.read([], true);   // one look without the list: not closed yet
+    expect(s.version).toBe(open);
+    s.read([], true);   // closed
+    expect(s.version).toBeGreaterThan(open);
+  });
+
+  it('rises for a hovered tooltip, cleared deals, a re-judging and a forgotten hover', () => {
+    const { s } = setup();
+    let v = s.version;
+    const rose = () => { const up = s.version > v; v = s.version; return up; };
+    s.applyTooltip({ key: 'traus', name: 'Traus', type: '', remaining: 7, stats: [{ label: 'att', weight: 1, total: 62, base: 60, delta: 2 }] }, 0.5);
+    expect(rose()).toBe(true);
+    s.clearDeals();
+    expect(rose()).toBe(true);
+    s.reevaluate();
+    expect(rose()).toBe(true);
+    s.forgetHover();
+    expect(rose()).toBe(true);
+    expect(s.hover).toBeNull();
+    s.forgetHover();
+    expect(rose()).toBe(false);
+    s.close();   // nothing open
+    expect(rose()).toBe(false);
   });
 });

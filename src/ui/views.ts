@@ -1,10 +1,10 @@
-// HTML for the page and the overlay, built from the shop state. Pure: everything comes in as
+// HTML for the page, built from the shop state. Pure: everything comes in as
 // arguments, so it is tested without a browser.
 import type { Engine } from '../engine';
 import { iconUrl } from '../icons';
-import { ago, cap, clock, DAY, esc, fmt, fmtEach, fmtShort, salesTxt, signed } from '../lib/format';
+import { ago, cap, clock, DAY, esc, fmt, fmtEach, salesTxt, signed } from '../lib/format';
 import { norm, parseAmount } from '../lib/text';
-import type { BookItem, MarketItem, Settings, ShopSortCol, UsualSource, Verdict } from '../lib/types';
+import type { BookItem, MarketItem, ShopSortCol, UsualSource, Verdict } from '../lib/types';
 import { isRough, marketTip, type MarketIndex } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
 import { sightingStats } from '../pricing/priceBook';
@@ -76,7 +76,7 @@ export function sortRows(rows: DisplayRow[], sort: ShopSort = BEST_FIRST): Displ
   });
 }
 
-const pctCell = (pct: number | null) => ({
+export const pctCell = (pct: number | null) => ({
   text: pct == null ? '–' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`,
   cls: pct == null ? 'dim' : pct < 0 ? 'pos' : pct > 0.15 ? 'neg' : '',
 });
@@ -107,16 +107,6 @@ export function shopRowHtml(r: DisplayRow, market: MarketIndex, failed?: Readonl
   </tr>`;
 }
 
-/** The overlay's row: price now, the usual price it's measured against, and how far apart they are. */
-export function overlayRowHtml(r: DisplayRow, market: MarketIndex, failed?: ReadonlySet<string>): string {
-  const pct = pctCell(r.pct);
-  const label = `${esc(r.name)}${r.truncated ? '…' : ''}`
-    + (r.unchecked ? ` <span class="cnt">${r.count} more, not hovered</span>` : r.count > 1 ? ` <span class="cnt">×${r.count}</span>` : '');
-  const chip = `<span class="chip ${r.verdict}"${r.why ? ` title="${esc(r.why)}"` : ''}>${r.verdict === 'new' ? 'No price' : VERDICT[r.verdict]}</span>`;
-  return `<tr class="v-${r.verdict}"><td class="name"><span class="nm">${iconHtml(market, r.key, failed)}<span class="nm-n" title="${esc(r.name)}">${label}</span></span></td>`
-    + `<td class="n">${fmtShort(r.unit)}</td><td class="n dim">${r.usual == null ? '–' : fmtShort(r.usual)}</td><td class="n ${pct.cls}">${pct.text}</td><td>${chip}</td></tr>`;
-}
-
 /** What the last hovered tooltip said, and what that makes the item worth. */
 export function hoverText(h: Hover | null, e: Engine): string {
   if (!h || e.now() - h.ts > 90e3) return '';
@@ -128,10 +118,11 @@ export function hoverText(h: Hover | null, e: Engine): string {
 /** The newest deal, while it is fresh enough to show in the banner. */
 export const freshDeal = (s: ShopSession, now: number): Deal | null => (s.lastDeal && now - s.lastDeal.ts < 5 * 60e3 ? s.lastDeal : null);
 
+/** The open shop in a few words: "6 listings, 1 deal". */
 export function shopMeta(s: ShopSession, rows: readonly DisplayRow[]): string {
   if (!s.open) return 'No shop open';
   const total = s.listingCount(), deals = rows.filter((r) => r.verdict === 'deal').length;
-  return `${total} listing${total === 1 ? '' : 's'}${deals ? `, ${deals} deal${deals === 1 ? '' : 's'}` : ''}, opened ${clock(s.since)}`;
+  return `${total} listing${total === 1 ? '' : 's'}${deals ? `, ${deals} deal${deals === 1 ? '' : 's'}` : ''}`;
 }
 
 export function dealsHtml(deals: readonly Deal[], market: MarketIndex, failed?: ReadonlySet<string>): string {
@@ -139,25 +130,6 @@ export function dealsHtml(deals: readonly Deal[], market: MarketIndex, failed?: 
     const l = dealLine(d, market);
     return `<li><span class="t">${clock(d.ts)}</span><span class="w"><span class="nm">${iconHtml(market, d.key, failed)}<span class="nm-t"><span class="nm-n">${esc(l.name)}</span><span class="sub">${esc(cap(l.listing))}, ${esc(l.why)}</span></span></span></span><span class="p">${esc(l.profit)}</span></li>`;
   }).join('');
-}
-
-export interface OverlayState { open: boolean; capturing: boolean; rows: DisplayRow[]; deal: Deal | null; hover: string; hoverKey: string | null }
-
-/** The overlay: the newest deal on top, then the best eight rows of the open shop. */
-export function overlayHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySet<string>, extra = ''): string {
-  const rows = o.rows.slice(0, 8);
-  const l = o.deal ? dealLine(o.deal, market) : null;
-  const head = `<div class="ph"><b>FM Deal Scanner</b><span>${o.open ? 'Shop open' : o.capturing ? 'Watching' : 'Not capturing'}</span></div>`;
-  const hover = o.hover && o.hoverKey != null ? `<p class="hovered">${iconHtml(market, o.hoverKey, failed)}<span>${esc(o.hover)}</span></p>` : '';
-  const deal = l && o.deal
-    ? `<div class="banner"><span class="label">Deal at ${clock(o.deal.ts)}</span><span class="what">${iconHtml(market, o.deal.key, failed)}<span>${esc(l.name)}</span></span><span class="math">${esc(cap(l.listing))}, ${esc(l.why)}</span><span class="profit">${esc(l.profit)}</span></div>`
-    : '';
-  const table = rows.length
-    ? '<table><colgroup><col><col style="width:62px"><col style="width:62px"><col style="width:50px"><col style="width:72px"></colgroup>'
-      + '<thead><tr><th>Item</th><th class="n">Each</th><th class="n">Usual</th><th class="n" title="Price now vs usual price">%</th><th></th></tr></thead>'
-      + `<tbody>${rows.map((r) => overlayRowHtml(r, market, failed)).join('')}</tbody></table>`
-    : '<p class="empty">Open a shop in the game.</p>';
-  return head + extra + hover + deal + table;
 }
 
 // ---------- price book ----------
@@ -210,8 +182,40 @@ export function marketInfo(m: MarketIndex, now: number): string {
     + (m.withNpc ? ` ${fmt(m.withNpc)} have an NPC shop price.` : ' <span class="warn">No NPC prices: load the tracker page again to get them.</span>');
 }
 
-export const rulesSummary = (st: Settings): string =>
-  `${st.discount}% off, ${fmt(st.minProfit)}+ profit, ${st.fee}% fee` + (st.market === 'off' ? ', market prices off' : '') + (st.area === 'manual' ? ', marked area' : '');
+/** What a load of tracker pages did, for the message after it. */
+export interface MarketLoadNote {
+  files: number;
+  /** prices kept now, and how many this load added or updated */
+  total: number;
+  changed: number;
+  world: string;
+  /** the world whose prices these replaced, if they did */
+  replaced: string | null;
+  /** names of the files with no price table, left out */
+  skipped: readonly string[];
+  /** prices with an NPC shop price */
+  npc: number;
+  /** what tidying the price book did, or '' */
+  tidy: string;
+  /** whether the browser had room to keep them */
+  kept: boolean;
+}
+
+/** The text when none of the files picked had a price table. */
+export const NO_PRICE_TABLE = "That page has no price table. On meso.watch, wait until your world's prices show, save the page as Webpage, Complete, and pick that .html file.";
+
+export function marketLoadText(n: MarketLoadNote): string {
+  const s = (k: number) => (k === 1 ? '' : 's');
+  const world = n.world || 'your world';
+  const prices = `${fmt(n.total)} market price${s(n.total)} for ${world}`;
+  return `Loaded ${n.files} file${s(n.files)}: `
+    + (n.changed ? `${prices} now, ${fmt(n.changed)} of them added or updated.` : `nothing new or changed, still ${prices}.`)
+    + (n.replaced ? ` These replaced the prices for ${n.replaced}.` : '')
+    + (n.npc ? ` ${fmt(n.npc)} have an NPC shop price.` : '')
+    + (n.skipped.length ? ` Skipped ${n.skipped.join(', ')}: no price table in ${n.skipped.length === 1 ? 'it' : 'them'}.` : '')
+    + (n.tidy ? ` ${n.tidy}` : '')
+    + (n.kept ? '' : ' The browser had no room to keep them, so load the files again next time.');
+}
 
 /** "Cape INT Scroll: Lesser, 80k" lines: a name and a price each. */
 export function parsePriceLines(text: string): { ok: { name: string; value: number }[]; bad: string[] } {

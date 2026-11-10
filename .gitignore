@@ -7,5 +7,6 @@ playwright-report/
 public/ocr/
 # fetched from maplestory.io by scripts/fetch-items.ts (npm run items)
 public/items.json
+public/equips.json
 .DS_Store
 *.log

@@ -1,7 +1,8 @@
 import type { Engine } from '../engine';
 import type { AppraisalEntry, TooltipRead } from '../lib/types';
+import { isEquipId } from '../market/equipFacts';
 import { resolveKey } from '../market/matching';
-import { statSig } from '../tooltip/statValue';
+import { hasStats, statSig } from '../tooltip/statValue';
 
 export const MAX_QTY = 999_999;
 
@@ -9,6 +10,12 @@ export const MAX_QTY = 999_999;
 export const clampQty = (n: number): number => (Number.isFinite(n) ? Math.max(1, Math.min(MAX_QTY, Math.floor(n))) : 1);
 
 const newId = (): string => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+/** An equip is one item, anything else a stack: told by the item's id, or by its tooltip's stats when the id is not known. */
+export function isEquipItem(e: Engine, key: string, tip?: TooltipRead): boolean {
+  const id = e.market.iconId(key);
+  return id != null ? isEquipId(id) : !!tip && hasStats(tip);
+}
 
 /** An entry for a name as typed or read off the screen, filed under the item it means. */
 export function entryFor(e: Engine, name: string, qty = 1, tip?: TooltipRead): AppraisalEntry {
@@ -51,7 +58,11 @@ export function parseAppraisalLines(text: string): { ok: { name: string; qty: nu
   return { ok, bad };
 }
 
-/** Entries read back from storage or a backup, with anything unusable dropped. */
+/**
+ * Entries read back from storage or a backup, with anything unusable dropped. A line at 1 whose number is not in doubt
+ * is taken as counted: items saved before typed counts were marked would otherwise all ask for their count again.
+ * Nothing tells old data from new, so this goes for every load. A line holding a tooltip is an equip, and is left alone.
+ */
 export function cleanEntries(v: unknown): AppraisalEntry[] {
   if (!Array.isArray(v)) return [];
   const out: AppraisalEntry[] = [];
@@ -62,6 +73,7 @@ export function cleanEntries(v: unknown): AppraisalEntry[] {
     if (typeof x.price === 'number' && x.price > 0) entry.price = x.price;
     if (x.ignored) entry.ignored = true;
     if (x.unsure) entry.unsure = true;
+    if (x.counted || (entry.qty === 1 && !entry.unsure && !entry.tip)) entry.counted = true;
     out.push(entry);
   }
   return out;

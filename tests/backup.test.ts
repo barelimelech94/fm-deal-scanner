@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type PriceBook } from '../src/lib/types';
 import { makeBackup, readBackup } from '../src/store/backup';
+import { importedText } from '../src/ui/dataGroup';
 
 const book: PriceBook = { items: { traus: { name: 'Traus', manualRef: 50000, buyUnder: null, s: [[1, 52000, 1]] } } };
 const appraisal: AppraisalEntry[] = [{ id: 'a1', key: 'lemona', name: 'Lemona', qty: 2, price: 21999 }];
@@ -47,5 +48,14 @@ describe('readBackup', () => {
     for (const bad of ['{broken', 'null', '[]', '{}', JSON.stringify({ version: 2, db: 'no' }), JSON.stringify({ version: 3, db: book }), 42]) {
       expect(() => readBackup(bad), String(bad)).toThrow();
     }
+  });
+});
+
+describe('what an import says', () => {
+  it('counts the items and lines, and names what it put back', () => {
+    const r = readBackup(makeBackup({ book, settings, region, itemsRegion: null, appraisal }));
+    expect(importedText(r, 1, 1)).toBe('Imported 1 item. Added 1 inventory line. Restored your settings and the marked areas.');
+    expect(importedText({ book, appraisal: [] }, 3, 0)).toBe('Imported 3 items.');
+    expect(importedText({ book, appraisal: [], itemsRegion }, 0, 2)).toBe('Imported 0 items. Added 2 inventory lines. Restored the marked areas.');
   });
 });

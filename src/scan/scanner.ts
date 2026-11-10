@@ -39,6 +39,12 @@ export interface ScanOptions {
   force?: boolean;
 }
 
+/**
+ * With a shop open, a screen that looks unchanged is still read again once its last read is this old (ms): a
+ * listing that sells greys one row, too little to change the screen's signature.
+ */
+const SHOP_REREAD_MS = 3000;
+
 interface ListCrop<I> { image: I; gray: GrayImage; region: Region }
 interface TipCrop<I> { image: I; sig: Float32Array; box: TooltipBox }
 
@@ -52,8 +58,6 @@ export interface ScannerHooks {
 
 /** One pass over a frame: find the list and any tooltip, read them, and hand the results to the shop. */
 export class Scanner<F, I> {
-  busy = false;
-  scans = 0;
   /** where the list was found in the last frame */
   found: Region | null = null;
   /** screen pixels per game pixel, from the last list found */
@@ -64,6 +68,8 @@ export class Scanner<F, I> {
   lastCrop: I | null = null;
   ocrMs = 0;
   private lastSig: Float32Array | null = null;
+  /** when the list was last read, by the engine's clock */
+  private lastReadAt = 0;
   private tipSig: Float32Array | null = null;
 
   constructor(
@@ -107,21 +113,18 @@ export class Scanner<F, I> {
     return { list, tip, opts };
   }
 
-  /** The slow part: reads the copies and updates the shop. */
-  async read(p: Prepared<I>): Promise<void> {
-    this.busy = true;
-    try {
-      await this.readList(p.list, p.opts, !!p.tip);
-      if (p.tip) await this.readTooltip(p.tip);
-    } finally {
-      this.busy = false;
-      this.scans++;
-    }
+  /**
+   * The slow part: reads the copies and updates the shop. `keep` is asked once each reading is done: when it says
+   * no (the read is no longer wanted), the shop is left as it was.
+   */
+  async read(p: Prepared<I>, keep: () => boolean = () => true): Promise<void> {
+    await this.readList(p.list, p.opts, !!p.tip, keep);
+    if (p.tip && keep()) await this.readTooltip(p.tip, keep);
   }
 
   async scan(frame: F, opts: ScanOptions): Promise<void> { await this.read(this.prepare(frame, opts)); }
 
-  private async readList(list: ListCrop<I> | null, opts: ScanOptions, covered: boolean): Promise<void> {
+  private async readList(list: ListCrop<I> | null, opts: ScanOptions, covered: boolean, keep: () => boolean): Promise<void> {
     if (!list) {
       // no list on screen: an open shop counts as closed after two looks, unless a tooltip covers it
       this.lastSig = null;
@@ -131,13 +134,17 @@ export class Scanner<F, I> {
     }
     this.lastCrop = list.image;
     const sig = signature(list.gray.gray, list.gray.w, list.gray.h);
-    // an unchanged screen is skipped, unless a new listing is waiting for its second read
-    if (!opts.force && !this.session.recheck && this.lastSig && sigDiff(sig, this.lastSig) < 2) return;
+    const now = this.e.now();
+    // an unchanged screen is skipped, unless a new listing is waiting for its second read or an open shop was not read lately
+    const stale = this.session.open && now - this.lastReadAt >= SHOP_REREAD_MS;
+    if (!opts.force && !this.session.recheck && !stale && this.lastSig && sigDiff(sig, this.lastSig) < 2) return;
     this.lastSig = sig;
+    this.lastReadAt = now;
     const t0 = performance.now();
     let lines: OcrLine[] = [];
     try { lines = await this.ocr.recognize(list.image); }
     finally { this.ocrMs = performance.now() - t0; }
+    if (!keep()) return;
     this.lastLines = lines.map((l) => `${Math.round(l.confidence)} ${l.text.trim()}`);
     const rows = parseLines(lines, list.gray);
     const { region, gray } = list;
@@ -146,10 +153,11 @@ export class Scanner<F, I> {
     if (this.session.read(rows, opts.live)) this.hooks.onBook?.();
   }
 
-  private async readTooltip(tip: TipCrop<I>): Promise<void> {
+  private async readTooltip(tip: TipCrop<I>, keep: () => boolean): Promise<void> {
     if (this.tipSig && sigDiff(tip.sig, this.tipSig) < 2) return;   // the same tooltip as last time
     this.tipSig = tip.sig;
     const lines = await this.ocr.recognize(tip.image);
+    if (!keep()) return;
     this.lastTipLines = lines.map((l) => l.text.trim());
     const t = parseTooltip(lines, this.resolveName);
     if (t && this.session.applyTooltip(t, tip.box.anchor)) this.hooks.onBook?.();
