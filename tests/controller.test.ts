@@ -11,7 +11,7 @@ import { ShopSession } from '../src/shop/session';
 import type { Pixels } from '../src/vision/pixels';
 import { HOVER_ITEMS } from './helpers/hover';
 import { FIXTURES, loadPng } from './helpers/image';
-import { engine, ITEMS } from './helpers/market';
+import { engine, ITEMS, NOW } from './helpers/market';
 import { pixelsAdapter } from './helpers/pipeline';
 
 const recorded = (name: string): OcrLine[] => JSON.parse(readFileSync(join(FIXTURES, 'ocr', `${name}.lines.json`), 'utf8')) as OcrLine[];
@@ -35,7 +35,8 @@ class FakeCapture implements CaptureSource<Pixels> {
  * fixtures: the shop list for a shop, the scroll's tooltip for anything else. It counts the passes.
  */
 function setup(o: { region?: Region | null; items?: Region | null } = {}) {
-  const e = engine({ items: [...ITEMS, ...HOVER_ITEMS.filter((it) => !ITEMS.some((x) => x.n === it.n))] });
+  let clock = NOW;
+  const e = engine({ now: () => clock, items: [...ITEMS, ...HOVER_ITEMS.filter((it) => !ITEMS.some((x) => x.n === it.n))] });
   const data: AppraisalData = { entries: [] };
   const session = new ShopSession(e), collector = new HoverCollector(e, data);
   const reads: string[] = [];
@@ -68,6 +69,8 @@ function setup(o: { region?: Region | null; items?: Region | null } = {}) {
   c.on((x) => changes.push(x.kind));
   return {
     e, c, data, session, collector, capture, ticker, changes, shop,
+    /** moves the clock the scanner reads the time from */
+    advance: (ms: number) => { clock += ms; },
     reads: () => reads.length,
     answer: (l: OcrLine[]) => { lines = l; },
     /** Holds the next read until the returned function is called. */
@@ -291,6 +294,44 @@ describe('ScanController', () => {
       expect(session.version).toBe(v);
       expect(changes.filter((x) => x !== 'checked')).toEqual([]);
       expect(changes.filter((x) => x === 'checked')).toHaveLength(10);
+    });
+
+    describe('an unchanged screen', () => {
+      it('is read again once the last read is 3 seconds old, while a shop is open', async () => {
+        const { c, reads, advance } = setup();
+        await c.useStill(SHOP);
+        expect(reads()).toBe(1);
+        advance(2999);
+        await c.tick();
+        expect(reads()).toBe(1);
+        advance(1);
+        await c.tick();
+        expect(reads()).toBe(2);
+      });
+
+      it('is never read again with no shop open', async () => {
+        const { c, session, reads, advance } = setup();
+        await c.useStill(SCROLL);
+        expect(session.open).toBe(false);
+        expect(reads()).toBe(1);
+        advance(60_000);
+        await c.tick();
+        expect(reads()).toBe(1);
+      });
+
+      it('has its 3 seconds start over with any read', async () => {
+        const { c, reads, advance } = setup();
+        await c.useStill(SHOP);
+        advance(2000);
+        await c.tick(true);   // a read for another reason
+        expect(reads()).toBe(2);
+        advance(2000);
+        await c.tick();
+        expect(reads()).toBe(2);   // 4 s after the first read, 2 s after the last
+        advance(1000);
+        await c.tick();
+        expect(reads()).toBe(3);
+      });
     });
 
     it('reads a new screenshot even while a check of the one before is under way', async () => {

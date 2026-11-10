@@ -155,14 +155,9 @@ test('takes a listing that sells while the shop is open out of the table, and ke
   await expect(guardian.locator('.chip')).toHaveText('Deal');
 
   // someone buys the Dark Guardian: the game greys its row, and the live listing leaves the table for its Sold twin.
-  // One row going grey changes too little of the screen for the scanner to read it again by itself (in the game the
-  // next change on screen does), so a check that reads it anyway is asked for once the frame is in.
-  type Fm = { FM: { capture: { framesIn: number }; controller: { tick(force: boolean): Promise<void> } } };
-  const frames = await page.evaluate(() => (window as unknown as Fm).FM.capture.framesIn);
+  // The frame hardly changes, so the scanner reads it again when the last read is 3 seconds old, and once more to confirm.
   await show(screen(fadeText(list, { x: 118, y: 18, w: 410, h: 90 })));
-  await expect.poll(() => page.evaluate(() => (window as unknown as Fm).FM.capture.framesIn)).toBeGreaterThan(frames);
-  await page.evaluate(() => (window as unknown as Fm).FM.controller.tick(true));
-  await expect(guardian.locator('.chip')).toHaveText('Sold');
+  await expect(guardian.locator('.chip')).toHaveText('Sold', { timeout: 15_000 });
   await expect(guardian).toHaveCount(1);
   await expect(page.locator('#shopTable tbody tr.v-deal')).toHaveCount(0);
   // the deal it was stays in the log

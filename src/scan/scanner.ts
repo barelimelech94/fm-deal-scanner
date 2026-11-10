@@ -39,6 +39,12 @@ export interface ScanOptions {
   force?: boolean;
 }
 
+/**
+ * With a shop open, a screen that looks unchanged is still read again once its last read is this old (ms): a
+ * listing that sells greys one row, too little to change the screen's signature.
+ */
+const SHOP_REREAD_MS = 3000;
+
 interface ListCrop<I> { image: I; gray: GrayImage; region: Region }
 interface TipCrop<I> { image: I; sig: Float32Array; box: TooltipBox }
 
@@ -62,6 +68,8 @@ export class Scanner<F, I> {
   lastCrop: I | null = null;
   ocrMs = 0;
   private lastSig: Float32Array | null = null;
+  /** when the list was last read, by the engine's clock */
+  private lastReadAt = 0;
   private tipSig: Float32Array | null = null;
 
   constructor(
@@ -126,9 +134,12 @@ export class Scanner<F, I> {
     }
     this.lastCrop = list.image;
     const sig = signature(list.gray.gray, list.gray.w, list.gray.h);
-    // an unchanged screen is skipped, unless a new listing is waiting for its second read
-    if (!opts.force && !this.session.recheck && this.lastSig && sigDiff(sig, this.lastSig) < 2) return;
+    const now = this.e.now();
+    // an unchanged screen is skipped, unless a new listing is waiting for its second read or an open shop was not read lately
+    const stale = this.session.open && now - this.lastReadAt >= SHOP_REREAD_MS;
+    if (!opts.force && !this.session.recheck && !stale && this.lastSig && sigDiff(sig, this.lastSig) < 2) return;
     this.lastSig = sig;
+    this.lastReadAt = now;
     const t0 = performance.now();
     let lines: OcrLine[] = [];
     try { lines = await this.ocr.recognize(list.image); }
