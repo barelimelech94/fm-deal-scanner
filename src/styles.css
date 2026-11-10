@@ -125,7 +125,6 @@ main { max-width: 1320px; margin: 0 auto; }
   .view.cols { display: block; columns: 2; column-gap: 16px; }
 }
 .view.cols > * { break-inside: avoid; margin-bottom: 16px; }
-.side { display: grid; gap: 16px; align-content: start; min-width: 0; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
 .panel.lead { box-shadow: var(--shadow); }
 .panel.quiet { background: var(--panel-q); }
@@ -281,6 +280,12 @@ td .sub.warn { color: var(--accent); }
 .aphead { margin: 18px 0 6px; font-size: .95rem; }
 
 /* Price book */
+.note.legend { max-width: none; }
+details.more { margin-top: 10px; }
+details.more > summary { cursor: pointer; font-weight: 700; font-size: .9rem; color: var(--muted); width: fit-content; }
+details.more > summary:hover { color: var(--ink); }
+details.more > * + * { margin-top: 8px; }
+.howto { margin: 0; padding-left: 1.3em; font-size: .88rem; display: grid; gap: 4px; }
 .searchbox { padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); min-width: 0; width: 240px; max-width: 100%; }
 .booktable { max-height: 480px; overflow: auto; }
 

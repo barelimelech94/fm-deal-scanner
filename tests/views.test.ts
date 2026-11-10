@@ -3,7 +3,7 @@ import type { RawListing } from '../src/lib/types';
 import { newItem } from '../src/pricing/priceBook';
 import { ShopSession } from '../src/shop/session';
 import {
-  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, shopMeta, shopRowHtml, sortRows,
+  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, marketLoadText, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, shopMeta, shopRowHtml, sortRows,
 } from '../src/ui/views';
 import { DEFAULT_SETTINGS } from '../src/lib/types';
 import { catalogOf, engine, NOW } from './helpers/market';
@@ -193,5 +193,25 @@ describe('choosing the shop order', () => {
 
   it('is saved with the other settings', () => {
     expect(DEFAULT_SETTINGS).toMatchObject({ shopSort: 'best', shopSortDir: 1 });
+  });
+});
+
+describe('the message after loading market prices', () => {
+  const note = { files: 1, total: 7, changed: 7, world: 'Windia', replaced: null, skipped: [], npc: 0, tidy: '', kept: true };
+
+  it('says how many prices there are now, and how many the load added or updated', () => {
+    expect(marketLoadText(note)).toBe('Loaded 1 file: 7 market prices for Windia now, 7 of them added or updated.');
+    expect(marketLoadText({ ...note, files: 2, total: 1200, changed: 1 })).toBe('Loaded 2 files: 1,200 market prices for Windia now, 1 of them added or updated.');
+  });
+
+  it('says when the prices of another world were replaced, and names the files it skipped', () => {
+    expect(marketLoadText({ ...note, replaced: 'Bera', skipped: ['notes.html'] }))
+      .toBe('Loaded 1 file: 7 market prices for Windia now, 7 of them added or updated. These replaced the prices for Bera. Skipped notes.html: no price table in it.');
+    expect(marketLoadText({ ...note, files: 1, skipped: ['a.html', 'b.html'] })).toContain('Skipped a.html, b.html: no price table in them.');
+  });
+
+  it('adds the NPC prices, the tidying, and when the browser had no room', () => {
+    expect(marketLoadText({ ...note, npc: 3, tidy: 'Merged 1 price-book entry.', kept: false }))
+      .toBe('Loaded 1 file: 7 market prices for Windia now, 7 of them added or updated. 3 have an NPC shop price. Merged 1 price-book entry. The browser had no room to keep them, so load the files again next time.');
   });
 });

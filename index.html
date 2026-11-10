@@ -160,42 +160,45 @@
               <th class="sortable n" data-col="usual">Usual</th>
               <th class="sortable n" data-col="low">Lowest</th>
               <th class="sortable n" data-col="last">Last seen</th>
-              <th class="n">Your price</th>
-              <th class="n">Buy under</th>
+              <th class="n" title="Used as the usual price instead of the market's">Your price</th>
+              <th class="n" title="A listing at or below this is a deal, whatever the usual price">Buy under</th>
               <th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="empty" id="bookEmpty">Empty. It fills as you open shops, or paste prices below.</p>
+        <p class="empty" id="bookEmpty">Empty. It fills as you open shops, or add your prices below.</p>
         <p class="note" id="bookHint"></p>
-        <p class="note">Usual is the market price unless tagged <b>you</b> (your price) or <b>seen</b> (your own sightings were lower). The number under it is the tracker's sales count: few sales means slow to resell. Buy under alerts at or below that price, whatever the usual price.</p>
+        <p class="note legend">Usual is the market price, or <b>you</b>: your price, or <b>seen</b>: your sightings were lower. Under it, the tracker's sales.</p>
+        <details class="more">
+          <summary>Add your prices in bulk</summary>
+          <textarea id="pasteBox" aria-label="Your prices, one item per line" placeholder="One item per line, price each:&#10;Cape INT Scroll: Lesser, 80k&#10;Tobi Throwing Stars = 1.8m"></textarea>
+          <div class="row">
+            <button class="btn" id="btnPaste">Add as your prices</button>
+          </div>
+          <p class="note" id="pasteMsg"></p>
+        </details>
       </div>
     </section>
 
-    <div class="side">
     <section class="panel quiet" aria-labelledby="hMarket">
       <div class="panel-head"><h2 id="hMarket">Market prices</h2></div>
       <div class="panel-body stack">
         <p class="marketline" id="marketAge">None loaded yet.</p>
         <div class="row">
-          <span class="btn filebtn">Update market prices<input type="file" id="fileMarket" accept=".html,.htm,text/html"></span>
+          <span class="btn filebtn">Update market prices<input type="file" id="fileMarket" multiple accept=".html,.htm,text/html"></span>
         </div>
         <p class="note" id="marketMsg"></p>
-        <p class="note">On <a href="https://meso.watch" target="_blank" rel="noreferrer">meso.watch</a>, once your world's price table has loaded, press ⌘S and save the page as <b>Webpage, Complete</b>, then pick that .html file. The prices stay in this browser.</p>
+        <details class="more">
+          <summary>How to get the file</summary>
+          <ol class="howto">
+            <li>On <a href="https://meso.watch" target="_blank" rel="noreferrer">meso.watch</a>, wait until your world's price table has loaded.</li>
+            <li>Press ⌘S and save the page as <b>Webpage, Complete</b>.</li>
+            <li>Pick that .html file with <b>Update market prices</b>, or several saved pages at once. The prices stay in this browser.</li>
+          </ol>
+        </details>
       </div>
     </section>
-    <section class="panel quiet" aria-labelledby="hPaste">
-      <div class="panel-head"><h2 id="hPaste"><label for="pasteBox">Your prices</label></h2></div>
-      <div class="panel-body stack">
-        <textarea id="pasteBox" placeholder="One item per line, price each:&#10;Cape INT Scroll: Lesser, 80k&#10;Tobi Throwing Stars = 1.8m"></textarea>
-        <div class="row">
-          <button class="btn" id="btnPaste">Add as your prices</button>
-        </div>
-        <p class="note" id="pasteMsg"></p>
-      </div>
-    </section>
-    </div>
   </section>
 
   <section class="view cols" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="-1" hidden></section>

@@ -218,6 +218,39 @@ export function marketInfo(m: MarketIndex, now: number): string {
     + (m.withNpc ? ` ${fmt(m.withNpc)} have an NPC shop price.` : ' <span class="warn">No NPC prices: load the tracker page again to get them.</span>');
 }
 
+/** What a load of tracker pages did, for the message after it. */
+export interface MarketLoadNote {
+  files: number;
+  /** prices kept now, and how many this load added or updated */
+  total: number;
+  changed: number;
+  world: string;
+  /** the world whose prices these replaced, if they did */
+  replaced: string | null;
+  /** names of the files with no price table, left out */
+  skipped: readonly string[];
+  /** prices with an NPC shop price */
+  npc: number;
+  /** what tidying the price book did, or '' */
+  tidy: string;
+  /** whether the browser had room to keep them */
+  kept: boolean;
+}
+
+/** The text when none of the files picked had a price table. */
+export const NO_PRICE_TABLE = "That page has no price table. On meso.watch, wait until your world's prices show, save the page as Webpage, Complete, and pick that .html file.";
+
+export function marketLoadText(n: MarketLoadNote): string {
+  const s = (k: number) => (k === 1 ? '' : 's');
+  const world = n.world || 'your world';
+  return `Loaded ${n.files} file${s(n.files)}: ${fmt(n.total)} market price${s(n.total)} for ${world} now, ${fmt(n.changed)} of them added or updated.`
+    + (n.replaced ? ` These replaced the prices for ${n.replaced}.` : '')
+    + (n.npc ? ` ${fmt(n.npc)} have an NPC shop price.` : '')
+    + (n.skipped.length ? ` Skipped ${n.skipped.join(', ')}: no price table in ${n.skipped.length === 1 ? 'it' : 'them'}.` : '')
+    + (n.tidy ? ` ${n.tidy}` : '')
+    + (n.kept ? '' : ' The browser had no room to keep them, so load the files again next time.');
+}
+
 /** "Cape INT Scroll: Lesser, 80k" lines: a name and a price each. */
 export function parsePriceLines(text: string): { ok: { name: string; value: number }[]; bad: string[] } {
   const ok: { name: string; value: number }[] = [], bad: string[] = [];

@@ -147,8 +147,9 @@ export class App {
       else document.title = 'FM Deal Scanner';
     });
     window.addEventListener('pagehide', () => this.bookSave.flush());
-    // the banner's 5 minutes and the hovered item's 90 seconds run out even when nothing is read
-    setInterval(() => { if (!document.hidden) { this.deals.render(true); this.renderOverlay(); } }, 15_000);
+    // the banner's 5 minutes and the hovered item's 90 seconds run out even when nothing is read, and the
+    // Prices view's "last seen" and the market prices' age move on
+    setInterval(() => { if (!document.hidden) { this.deals.render(true); this.prices.render(true); this.renderOverlay(); } }, 15_000);
     setInterval(() => { if (this.shell.isShown('settings')) this.settingsView.renderTrouble(); }, 1000);
     void this.loadCatalog();
   }

@@ -3,11 +3,12 @@ import { fmt } from '../lib/format';
 import { parseAmount } from '../lib/text';
 import type { MarketData } from '../lib/types';
 import { resolveKey } from '../market/matching';
+import { mergeMarketPages } from '../market/mergeMarket';
 import { parseTrackerPage } from '../market/parseTrackerPage';
 import { fixSetSightings, mergeIntoMarket, newItem } from '../pricing/priceBook';
-import { $, onFile } from './dom';
+import { $, onFiles } from './dom';
 import { DrawGate, setHidden, setHtml, setText } from './render';
-import { bookRowHtml, bookRows, marketInfo, parsePriceLines, type BookSort } from './views';
+import { bookRowHtml, bookRows, marketInfo, marketLoadText, NO_PRICE_TABLE, parsePriceLines, type BookSort } from './views';
 
 const BOOK_MAX = 250;
 
@@ -34,7 +35,7 @@ export interface PricesDeps {
   version(): string;
 }
 
-/** The Prices view: the price book with your prices and buy-under targets, the market prices, and your prices pasted in. */
+/** The Prices view: the price book with your prices and buy-under targets (and pasted in), and the market prices. */
 export class PricesView {
   private sort: BookSort = { col: 'last', dir: -1 };
   private readonly gate = new DrawGate();
@@ -86,19 +87,29 @@ export class PricesView {
       if (!bad.length) box.value = '';
     });
 
-    onFile('fileMarket', async (f) => {
-      try {
-        const m = parseTrackerPage(await f.text(), f.lastModified || Date.now());
-        if (!m.items.length) throw new Error('no price table');
-        const kept = this.d.setMarket(m);
-        const tidy = tidyBook(e);
-        if (tidy) this.d.saveBook();
-        this.d.changed();
-        $('marketMsg').textContent = `Loaded ${fmt(e.market.priced)} market prices${m.world ? ` for ${m.world}` : ''}.` + (e.market.withNpc ? ` ${fmt(e.market.withNpc)} have an NPC shop price.` : '')
-          + (tidy ? ` ${tidy}` : '') + (kept ? '' : ' The browser had no room to keep them, so load the file again next time.');
-      } catch {
-        $('marketMsg').textContent = "That page has no price table. On meso.watch, wait until your world's prices show, save the page as Webpage, Complete, and pick that .html file.";
-      }
+    onFiles('fileMarket', (files) => this.loadMarket(files));
+  }
+
+  /**
+   * Tracker pages picked: each is read, and those with a price table are added to the prices kept, oldest first.
+   * Says what that did, naming the files that had no price table.
+   */
+  private async loadMarket(files: File[]): Promise<void> {
+    const e = this.d.engine, pages: MarketData[] = [], skipped: string[] = [];
+    for (const f of files) {
+      const m = await f.text().then((html) => parseTrackerPage(html, f.lastModified || Date.now()), () => null);
+      if (m?.items.length) pages.push(m);
+      else skipped.push(f.name);
+    }
+    if (!pages.length) { $('marketMsg').textContent = NO_PRICE_TABLE; return; }
+    const load = mergeMarketPages(e.market.data, pages);
+    const kept = this.d.setMarket(load.data);
+    const tidy = tidyBook(e);
+    if (tidy) this.d.saveBook();
+    this.d.changed();
+    $('marketMsg').textContent = marketLoadText({
+      files: pages.length, total: e.market.priced, changed: load.changed, world: load.data.world, replaced: load.replaced,
+      skipped, npc: e.market.withNpc, tidy, kept,
     });
   }
 
@@ -114,7 +125,7 @@ export class PricesView {
     setHtml($<HTMLTableElement>('bookTable').tBodies[0]!, rows.map((r) => bookRowHtml(r, now, this.d.failed)).join(''));
     const empty = $('bookEmpty');
     setHidden(empty, rows.length > 0);
-    setText(empty, q.trim() ? 'Nothing matches that name.' : 'Empty. It fills as you open shops, or paste prices below.');
+    setText(empty, q.trim() ? 'Nothing matches that name.' : 'Empty. It fills as you open shops, or add your prices below.');
     const hint = $('bookHint');
     setText(hint, all.length > BOOK_MAX ? `Showing ${BOOK_MAX} of ${fmt(all.length)}. Type more of the name to narrow it.`
       : !q.trim() && e.market.size ? `Type in the filter to find any of the ${fmt(e.market.size)} items the price tracker lists, and set your own price or buy-under on it.` : '');

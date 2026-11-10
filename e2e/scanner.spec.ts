@@ -85,7 +85,7 @@ test('loads with no errors and serves the reader from the site', async ({ page }
 test('reads a shop from a screenshot and flags the deal', async ({ page }) => {
   const { errors, icons } = await open(page);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
-  await expect(page.locator('#marketMsg')).toContainText('Loaded 7 market prices for Windia');
+  await expect(page.locator('#marketMsg')).toContainText('Loaded 1 file: 7 market prices for Windia now');
 
   await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
   const names = await shopNames(page);
@@ -144,7 +144,7 @@ test('appraises a pile of items typed in, and keeps it', async ({ page }) => {
   const { errors } = await open(page);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
-  await expect(page.locator('#marketMsg')).toContainText('Loaded 7 market prices');
+  await expect(page.locator('#marketMsg')).toContainText('7 market prices for Windia now');
   await view(page, 'inventory');
   await expect(page.locator('#apMeta')).toHaveText('Nothing added yet');
   await expect(page.locator('#apEmpty')).toBeVisible();
@@ -210,7 +210,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   test.setTimeout(240_000);
   const { errors } = await open(page);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(HOVER_TRACKER) });
-  await expect(page.locator('#marketMsg')).toContainText('Loaded 10 market prices');
+  await expect(page.locator('#marketMsg')).toContainText('10 market prices for Windia now');
   const screen = (name: string) => screenFile(`${name}.png`, placeOn(loadPng(`appraisal/${name}.png`), 1440, 900, 100, 100));
   const rows = page.locator('#apBody tr');
   await view(page, 'inventory');
@@ -618,6 +618,51 @@ test('the deal rules in the Open shop sentence and the bell are the settings in 
   await expect(bell).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 30, minProfit: 12500, fee: 20, sound: true });
+  expect(errors).toEqual([]);
+});
+
+test('adds market files up: several at once, and on top of those loaded before', async ({ page }) => {
+  const { errors } = await open(page);
+  await view(page, 'prices');
+  const how = page.locator('details', { hasText: 'How to get the file' }), bulk = page.locator('details', { hasText: 'Add your prices in bulk' });
+  await expect(how).not.toHaveAttribute('open');
+  await expect(bulk).not.toHaveAttribute('open');
+  await expect(page.locator('#pasteBox')).toBeHidden();
+  await how.locator('summary').click();
+  await expect(how.locator('li')).toHaveCount(3);
+  await expect(page.locator('#marketAge')).toHaveText('None loaded yet.');
+
+  // the tracker shows its table a page at a time: two saved pages, picked together, give both
+  const file = (name: string, rows: TrackerRow[]) => ({ name, mimeType: 'text/html', buffer: Buffer.from(trackerPage(rows)) });
+  await page.setInputFiles('#fileMarket', [
+    file('page1.html', [['01472013', 'Dark Guardian', 'Weapons', 120000, 300, '🗡️'], ['01082003', 'Lemona', 'Equips', 21000, 50, '🧤']]),
+    file('page2.html', [['01302012', 'Traus', 'Weapons', 55000, 94, '⚔️']]),
+    { name: 'notes.html', mimeType: 'text/html', buffer: Buffer.from('<html><body>nothing here</body></html>') },
+  ]);
+  await expect(page.locator('#marketMsg')).toHaveText('Loaded 2 files: 3 market prices for Windia now, 3 of them added or updated. Skipped notes.html: no price table in it.');
+  await expect(page.locator('#marketAge')).toContainText('3 prices for Windia');
+
+  // a third page later adds to them, and its price for an item already there wins
+  await page.setInputFiles('#fileMarket', file('page3.html', [['01082003', 'Lemona', 'Equips', 19000, 52, '🧤'], ['02070006', 'Wolbi Throwing Stars', 'Stars', 2499, 7359, '⭐']]));
+  await expect(page.locator('#marketMsg')).toHaveText('Loaded 1 file: 4 market prices for Windia now, 2 of them added or updated.');
+  await page.fill('#bookSearch', 'lemona');
+  await expect(page.locator('#bookTable tbody tr', { hasText: 'Lemona' })).toContainText('19,000');
+  // kept for next time
+  await page.reload();
+  await expect(page.locator('#marketAge')).toContainText('4 prices for Windia');
+
+  // a file with no price table changes nothing
+  await page.setInputFiles('#fileMarket', { name: 'notes.html', mimeType: 'text/html', buffer: Buffer.from('<html></html>') });
+  await expect(page.locator('#marketMsg')).toContainText('That page has no price table.');
+  await expect(page.locator('#marketAge')).toContainText('4 prices for Windia');
+
+  // your prices in bulk, from behind their disclosure
+  await bulk.locator('summary').click();
+  await page.fill('#pasteBox', 'Traus, 60k');
+  await page.click('#btnPaste');
+  await expect(page.locator('#pasteMsg')).toHaveText('Added 1 price.');
+  await page.fill('#bookSearch', '');
+  await expect(page.locator('#bookTable tbody tr', { hasText: 'Traus' }).locator('input[data-field="manualRef"]')).toHaveValue('60,000');
   expect(errors).toEqual([]);
 });
 
