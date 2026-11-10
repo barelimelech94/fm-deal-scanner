@@ -246,6 +246,31 @@ describe('HoverCollector', () => {
     expect(c.last).toBeNull();
   });
 
+  it('raises its version on every change, and not for checks that change nothing', () => {
+    const { c } = make();
+    let v = c.version;
+    const rose = () => { const up = c.version > v; v = c.version; return up; };
+    c.scanning = true;
+    expect(rose()).toBe(true);
+    c.scanning = true;
+    expect(rose()).toBe(false);
+    const sig = new Float32Array(48 * 48).fill(1);
+    c.due(sig, true); c.noTooltip();
+    expect(rose()).toBe(false);
+    const ev = c.ingest(tip('Lemona', true), at(100));
+    expect(rose()).toBe(true);
+    c.ingest(tip('Lemona', true), at(100));   // again: says so
+    expect(rose()).toBe(true);
+    c.confirm(ev.entryId!);
+    expect(rose()).toBe(true);
+    c.undo();
+    expect(rose()).toBe(true);
+    c.unreadable([]);
+    expect(rose()).toBe(true);
+    c.forget();
+    expect(rose()).toBe(true);
+  });
+
   it('reads a tooltip once it has stayed for two checks, and not the same one twice', () => {
     const { c } = make();
     const a = new Float32Array(48 * 48).fill(10), far = new Float32Array(48 * 48).fill(200);

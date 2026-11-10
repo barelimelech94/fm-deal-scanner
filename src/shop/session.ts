@@ -61,6 +61,8 @@ function sameSpot(before: readonly Seen[], now: readonly Seen[]): boolean {
 }
 
 export class ShopSession {
+  /** rises on any change to what the shop shows: its rows, open or closed, the deals, the hovered item */
+  version = 0;
   open = false;
   since = 0;
   private miss = 0;
@@ -108,6 +110,13 @@ export class ShopSession {
       if (this.open && this.miss >= 2) this.close();
       return false;
     }
+    const changed = this.readRows(raw, live);
+    if (changed.rows) this.version++;
+    return changed.book;
+  }
+
+  /** A read with a list: which rows count, and whether the rows or the price book changed. */
+  private readRows(raw: readonly RawListing[], live: boolean): { rows: boolean; book: boolean } {
     this.miss = 0;
     // a half-visible row reads as gibberish: drop names the reader doubts that match no known item
     const rows = this.match(raw).filter((r) => r.known || r.nameConf >= 40);
@@ -131,14 +140,16 @@ export class ShopSession {
     }
     this.recheck = [...this.pending.values()].some((v) => v.read === n);
     const seen: Seen[] = rows.map((r) => ({ k: keyOf(r), fy: r.fy ?? null }));
-    if (!ok.length) { if (!this.gap) this.before = seen; return false; }
+    if (!ok.length) { if (!this.gap) this.before = seen; return { rows: false, book: false }; }
 
+    let rowsChanged = false;
     // after a gap, the list is the same shop only if a row is back where it was; otherwise it is another shop
     if (this.open && this.gap && this.rows.size && !sameSpot(this.before, seen.filter((x) => ok.some((r) => keyOf(r) === x.k)))) {
       this.rows.clear();
       this.since = this.e.now();
+      rowsChanged = true;
     }
-    if (!this.open) { this.open = true; this.since = this.e.now(); this.rows.clear(); }
+    if (!this.open) { this.open = true; this.since = this.e.now(); this.rows.clear(); rowsChanged = true; }
     this.gap = false;
     this.before = seen;
 
@@ -152,6 +163,7 @@ export class ShopSession {
       if (existing) {
         const was = existing.count;
         existing.count = Math.max(existing.count, countNow.get(k) ?? 1);
+        if (existing.count !== was) rowsChanged = true;
         if (r.greyed && existing.count > was) soldRise.set(k, existing.count - was);
         if (r.fy != null) existing.fy = r.fy;
         if (fysNow.has(k)) existing.fys = fysNow.get(k)!;
@@ -160,6 +172,7 @@ export class ShopSession {
       const ev = evaluate(this.e, r);   // judged before this listing joins the history
       const rec: ShopRecord = { ...r, ...ev, count: countNow.get(k) ?? 1, fys: fysNow.get(k) ?? [], seenAt: this.e.now() };
       this.rows.set(k, rec);
+      rowsChanged = true;
       if (r.greyed) soldRise.set(k, rec.count);
       if (!r.greyed && !r.unsure) {
         const mk = this.e.market.get(r.key);
@@ -175,17 +188,20 @@ export class ShopSession {
     for (const [k, rise] of soldRise) {
       const lk = liveKeyOf(k), live = this.rows.get(lk);
       if (!live || !had.has(lk)) continue;
+      const was = live.count;
       live.count = Math.max(countNow.get(lk) ?? 0, live.count - rise);
+      if (live.count !== was) rowsChanged = true;
       if (live.count <= 0) { this.rows.delete(lk); continue; }
       while (live.copies && live.copies.size > live.count) live.copies.delete(live.copies.keys().next().value!);
     }
-    return bookChanged;
+    return { rows: rowsChanged, book: bookChanged };
   }
 
   /** A tooltip covering the list hides rows; it doesn't mean the shop closed. */
   covered(): void { this.miss = 0; }
 
   close(): void {
+    if (this.open || this.rows.size) this.version++;
     this.open = false;
     this.gap = false;
     this.before = [];
@@ -203,6 +219,12 @@ export class ShopSession {
   /** Re-judges every listing, after a price or a setting changed. */
   reevaluate(): void {
     for (const rec of this.rows.values()) Object.assign(rec, evaluate(this.e, rec));
+    this.version++;
+  }
+
+  /** Forgets the hovered item, so nothing about it shows. */
+  forgetHover(): void {
+    if (this.hover) { this.hover = null; this.version++; }
   }
 
   /** One listing's hovered copies, each judged with its own stats. */
@@ -230,6 +252,7 @@ export class ShopSession {
    */
   applyTooltip(t: TooltipRead, anchor: number): boolean {
     let bookChanged = false;
+    this.version++;
     const it = this.e.book.items[t.key];
     if (it && t.remaining != null && t.remaining > (it.maxSlots ?? 0)) { it.maxSlots = t.remaining; bookChanged = true; }
     const v = statValue(t, {
@@ -263,7 +286,7 @@ export class ShopSession {
     return bookChanged;
   }
 
-  clearDeals(): void { this.deals = []; this.lastDeal = null; }
+  clearDeals(): void { this.deals = []; this.lastDeal = null; this.version++; }
 
   private alert(row: DisplayRow): void {
     const k = dealKey(row), now = this.e.now();
@@ -272,6 +295,7 @@ export class ShopSession {
     if (!fresh && this.deals.some((d) => dealKey(d) === k)) return;   // already in the log
     if (fresh) this.alerted.set(k, now);
     const d: Deal = { ...row, ts: now };
+    this.version++;
     this.deals.unshift(d);
     if (this.deals.length > MAX_DEALS) this.deals.pop();
     this.lastDeal = d;
@@ -279,6 +303,7 @@ export class ShopSession {
   }
 
   private dropDeal(d: Deal): void {
+    this.version++;
     this.deals = this.deals.filter((x) => x !== d);
     if (this.lastDeal === d) this.lastDeal = this.deals[0] ?? null;
   }
