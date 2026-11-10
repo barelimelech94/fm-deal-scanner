@@ -5,7 +5,7 @@ import { quoteFull, quoteShort } from '../src/appraisal/quote';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type TooltipRead } from '../src/lib/types';
 import { Storage } from '../src/store/storage';
 import { AppraisalPanel } from '../src/ui/appraisalPanel';
-import { engine, NOW } from './helpers/market';
+import { engine, FACTS, NOW } from './helpers/market';
 
 const e = engine({ settings: { appraisalMode: 'fair' } });
 const entry = (name: string, qty = 1, o: Partial<AppraisalEntry> = {}): AppraisalEntry => ({ ...entryFor(e, name, qty), ...o });
@@ -62,6 +62,14 @@ describe('appraise', () => {
     expect(appraiseEntry(e, entry('Korean Fan'), 'fair').tag).toBe('rough');
     const fanTip: TooltipRead = { key: 'korean fan', name: 'Korean Fan', type: 'Fan', remaining: 7, stats: [] };
     expect(appraiseEntry(e, entry('Korean Fan', 1, { tip: fanTip }), 'fair').tag).toBe('priced');
+  });
+
+  it("reads the base and the slots from the game data when it has the item's", () => {
+    const tip: TooltipRead = { key: 'traus', name: 'Traus', type: '', remaining: 7, stats: [{ label: 'att', weight: 1, total: 58, base: 58, delta: 0 }] };
+    expect(appraiseEntry(e, entry('Traus', 1, { tip }), 'fair').stats?.summary).toBe('average stats, 7 slots left');
+    const l = appraiseEntry(engine({ settings: { appraisalMode: 'fair' }, facts: FACTS }), entry('Traus', 1, { tip }), 'fair');
+    expect(l.stats?.summary).toBe('−2 att, 7 slots left');
+    expect(l.unit).toBe(46200);
   });
 
   it('uses your typed price from the price book, in every mode', () => {

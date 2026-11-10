@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RawListing, TooltipRead } from '../src/lib/types';
 import { ShopSession, type Deal } from '../src/shop/session';
-import { engine, NOW } from './helpers/market';
+import { engine, FACTS, NOW } from './helpers/market';
 
 const raw = (name: string, price: number, o: Partial<RawListing> = {}): RawListing => ({
   name, truncated: false, nameConf: 95, cy: null, qty: 1, price, greyed: false, unsure: false, ...o,
@@ -321,6 +321,16 @@ describe('stats from tooltips', () => {
     expect(s.applyTooltip(traus(60, 9), 0.5)).toBe(true);
     expect(e.book.items.traus!.maxSlots).toBe(9);
     expect(s.applyTooltip(traus(60, 8), 0.5)).toBe(false);
+  });
+
+  it("reads the base and the slots from the game data when it has the item's", () => {
+    const tip: TooltipRead = { key: 'traus', name: 'Traus', type: '', remaining: 5, stats: [{ label: 'att', weight: 1, total: 62, base: 62, delta: 0 }] };
+    const plain = setup();
+    plain.s.applyTooltip(tip, 0.5);
+    expect(plain.s.hover!.summary).toBe('average stats, 5 slots left');
+    const { s } = setup({ facts: FACTS });
+    s.applyTooltip(tip, 0.5);
+    expect(s.hover!.summary).toBe('+2 att, 2 of 7 slots used');
   });
 
   it('shows what was hovered even outside a shop', () => {

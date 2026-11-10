@@ -6,7 +6,7 @@ import type { OcrLine, StatLine, TooltipRead } from '../lib/types';
  * Stat lines and how much one point of each is worth, relative to a point of attack. Labels are
  * compared letters only, allowing a misread letter or two in the long ones ("WWeapan Attack").
  */
-const STAT_KINDS: readonly [string, string, number][] = [
+const STAT_KINDS = [
   ['weaponattack', 'att', 1], ['magicattack', 'magic att', 1],
   ['str', 'STR', 0.5], ['dex', 'DEX', 0.5], ['int', 'INT', 0.5], ['luk', 'LUK', 0.5],
   ['accuracy', 'accuracy', 0.2], ['avoidability', 'avoid', 0.15], ['speed', 'speed', 0.2], ['jump', 'jump', 0.1],
@@ -15,9 +15,12 @@ const STAT_KINDS: readonly [string, string, number][] = [
   ['weapondef', 'weapon def', 0.05], ['magicdef', 'magic def', 0.05], ['evasion', 'avoid', 0.15],
   ['criticalrate', 'crit rate', 0.3], ['criticaldamage', 'crit dmg', 0.3],
   ['maxhp', 'HP', 0.01], ['maxmp', 'MP', 0.01], ['hp', 'HP', 0.01], ['mp', 'MP', 0.01],
-];
+] as const satisfies readonly (readonly [string, string, number])[];
 
-export function statKind(label: string): { label: string; weight: number } | null {
+/** The name a stat line goes by: "att", "magic def", "HP". */
+export type StatLabel = (typeof STAT_KINDS)[number][1];
+
+export function statKind(label: string): { label: StatLabel; weight: number } | null {
   const k = label.toLowerCase().replace(/[^a-z]/g, '');
   const tol = k.length >= 10 ? 2 : k.length >= 6 ? 1 : 0;
   let best: (typeof STAT_KINDS)[number] | null = null, bd = Infinity;
@@ -31,17 +34,35 @@ export function statKind(label: string): { label: string; weight: number } | nul
 /** Letters the reader takes for digits in numbers: "(G0 +2)" is "(60 +2)". */
 const toDigits = (s: string) => s.replace(/[Gb]/g, '6').replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5').replace(/B/g, '8').replace(/[Zz]/g, '2');
 
+/** "+62 (60 +2)" in its parts, as read: the total, and whichever parts of the bracket came out. */
+function statParts(value: string) {
+  // the base can come out as letters ("(ED -2)" for "(60 -2)"); the difference then still tells it
+  // a "+" is sometimes read as another symbol ("#1" for "+1")
+  const m = toDigits(value.replace(/^[^\w+\-\s]+/, '')).match(/^\s*\+?\s*(\d+)\s*(?:\(\s*([^\s()+-]*)\s*([+-])?\s*(\d+)?\s*\)?)?/);
+  if (!m) return null;
+  return { total: +m[1]!, base: m[2] && /^\d+$/.test(m[2]) ? +m[2] : null, sign: m[3] ?? null, mod: m[4] != null ? +m[4] : null };
+}
+
+/**
+ * The bracket's base and signed difference, when both came out as numbers and they disagree with the
+ * total by more than the sign (the sign is the part most often misread). With the item's real base
+ * known, the bracket then tells the total: the game printed base ± n.
+ */
+function printedBracket(value: string): { base: number; diff: number } | null {
+  const p = statParts(value);
+  if (!p || p.base == null || p.sign == null || p.mod == null || Math.abs(p.total - p.base) === p.mod) return null;
+  return { base: p.base, diff: p.sign === '-' ? -p.mod : p.mod };
+}
+
 /**
  * "+62 (60 +2)": a total, its base and the difference. Each is checked against the others, so one
  * misread part (a lost minus, a base of "0" for "60") can't change the result; with no way to tell,
  * the stat counts as average.
  */
 export function statNumbers(value: string): { total: number; base: number } | null {
-  // the base can come out as letters ("(ED -2)" for "(60 -2)"); the difference then still tells it
-  // a "+" is sometimes read as another symbol ("#1" for "+1")
-  const m = toDigits(value.replace(/^[^\w+\-\s]+/, '')).match(/^\s*\+?\s*(\d+)\s*(?:\(\s*([^\s()+-]*)\s*([+-])?\s*(\d+)?\s*\)?)?/);
-  if (!m) return null;
-  const total = +m[1]!, base = m[2] && /^\d+$/.test(m[2]) ? +m[2] : null, sign = m[3] ?? null, mod = m[4] != null ? +m[4] : null;
+  const p = statParts(value);
+  if (!p) return null;
+  const { total, base, sign, mod } = p;
   // copies differ from the base by a few points; "(602)" for "(60 2)" is not a base of 602
   const plausible = (b: number) => Math.abs(total - b) <= Math.max(10, 0.35 * b);
   if (base != null && (mod == null || Math.abs(total - base) === mod) && plausible(base)) return { total, base };
@@ -100,7 +121,10 @@ export function parseTooltip(lines: readonly OcrLine[], resolve: ResolveName, op
     const kind = statKind(mm[1]!);
     const nums = kind && statNumbers(mm[2]!);
     if (!kind || !nums) continue;
-    stats.push({ label: kind.label, weight: kind.weight, total: nums.total, base: nums.base, delta: nums.total - nums.base });
+    const line: StatLine = { label: kind.label, weight: kind.weight, total: nums.total, base: nums.base, delta: nums.total - nums.base };
+    const printed = printedBracket(mm[2]!);
+    if (printed) line.printed = printed;
+    stats.push(line);
   }
   if (!key || !name) return null;
   // a tooltip with no stat lines is an item with none (a scroll, a potion): only when asked, and only for a real item

@@ -6,7 +6,7 @@ import {
   fixSetSightings, isPriceBook, logSighting, mergeBackup, mergeIntoMarket, newItem, pruneOld, sightingStats,
 } from '../src/pricing/priceBook';
 import { DEFAULT_SETTINGS } from '../src/lib/types';
-import { engine, market, NOW } from './helpers/market';
+import { engine, FACTS, market, NOW } from './helpers/market';
 
 const listing = (o: Partial<Listing> & { key: string; price: number }): Listing => ({
   name: o.key, truncated: false, nameConf: 95, cy: 0, qty: 1, greyed: false, unsure: false,
@@ -101,6 +101,15 @@ describe('evaluate', () => {
       expect(evaluate(engine(), listing({ key: 'traus', price: 40000 })).verdict).toBe('deal');
       // 2 attack under and one slot used: 3 points, 24% off the usual 55,000
       expect(evaluate(engine(), { ...listing({ key: 'traus', price: 40000 }), tip: tip(58, 6) }).verdict).toBe('fair');
+    });
+    it("reads the base and the slots from the game data when it has the item's", () => {
+      // no base and no type read: on their own, the stats look average and the slots unknown
+      const t: TooltipRead = { key: 'traus', name: 'Traus', type: '', remaining: 6, stats: [{ label: 'att', weight: 1, total: 63, base: 63, delta: 0 }] };
+      const row = { ...listing({ key: 'traus', price: 50000 }), tip: t };
+      expect(evaluate(engine(), row).stats!.summary).toBe('average stats, 6 slots left');
+      const ev = evaluate(engine({ facts: FACTS }), row);
+      expect(ev.stats!.summary).toBe('+3 att, 1 of 7 slots used');
+      expect(ev.usual).toBeCloseTo(55000 * 1.16);
     });
     it('settles a rough market price', () => {
       const t: TooltipRead = { ...tip(60, 7), key: 'korean fan', name: 'Korean Fan', type: 'Fan' };

@@ -1,4 +1,4 @@
-import type { Engine } from '../engine';
+import { equipFact, type Engine } from '../engine';
 import type { Evaluation, Listing, RawListing, TooltipRead } from '../lib/types';
 import { isSetItem } from '../market/marketIndex';
 import { resolveKey } from '../market/matching';
@@ -232,7 +232,9 @@ export class ShopSession {
     let bookChanged = false;
     const it = this.e.book.items[t.key];
     if (it && t.remaining != null && t.remaining > (it.maxSlots ?? 0)) { it.maxSlots = t.remaining; bookChanged = true; }
-    const v = statValue(t, { statPct: this.e.settings.statPct, slotWorth: this.e.settings.slotWorth, maxSlotsSeen: it?.maxSlots });
+    const v = statValue(t, {
+      statPct: this.e.settings.statPct, slotWorth: this.e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(this.e, t.key),
+    });
     this.hover = { key: t.key, name: t.name, summary: v.summary, mult: v.mult, ts: this.e.now(), rec: null };
 
     const near = (r: ShopRecord) => Math.min(...(r.fys.length ? r.fys : [r.fy ?? 9]).map((y) => Math.abs(y - anchor)));

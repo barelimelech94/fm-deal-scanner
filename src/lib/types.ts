@@ -163,7 +163,11 @@ export interface Listing extends RawListing {
 export type Verdict = 'deal' | 'fair' | 'high' | 'new' | 'sold' | 'unsure';
 export type UsualSource = 'yours' | 'market' | 'seen';
 
-export interface StatLine { label: string; weight: number; total: number; base: number; delta: number }
+export interface StatLine {
+  label: string; weight: number; total: number; base: number; delta: number;
+  /** the "(base ±n)" as printed, kept when it disagrees with the total: one of them was misread */
+  printed?: { base: number; diff: number };
+}
 export interface TooltipRead {
   key: string;
   name: string;

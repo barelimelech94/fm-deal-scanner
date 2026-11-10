@@ -1,4 +1,4 @@
-import type { Engine } from '../engine';
+import { equipFact, type Engine } from '../engine';
 import type { AppraisalEntry, AppraisalMode, AppraisalSortCol, StatValue, UsualSource } from '../lib/types';
 import { isSetItem, npcSellPrice } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
@@ -60,7 +60,7 @@ export function appraiseEntry(e: Engine, entry: AppraisalEntry, mode: AppraisalM
   const u = typed != null ? { value: typed, src: 'line' as const, rough: false } : usualPrice(it, mk, e.settings, e.now(), mode);
   // stats read from a hover tooltip scale an equip's price, and settle a rough market price, as in the shop
   const stats = entry.tip && typed == null
-    ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots })
+    ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, entry.key) })
     : null;
   let unit = u ? u.value * (stats?.mult ?? 1) : null, src: LineSource | null = u?.src ?? null;
   let rough = !!u?.rough && !stats;

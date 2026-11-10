@@ -1,4 +1,4 @@
-import type { Engine } from '../engine';
+import { equipFact, type Engine } from '../engine';
 import type { BookItem, Evaluation, Listing, MarketItem, PriceMode, Settings, TooltipRead, UsualSource } from '../lib/types';
 import { isRough, npcSellPrice } from '../market/marketIndex';
 import { statValue } from '../tooltip/statValue';
@@ -56,7 +56,7 @@ export function evaluate(e: Engine, row: Judged): Evaluation {
   const mk = e.market.get(row.key);
   let u = usualPrice(it, mk, e.settings, e.now());
   // stats read from the hover tooltip scale the usual price, and settle a "rough" market price
-  const stats = row.tip ? statValue(row.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots }) : null;
+  const stats = row.tip ? statValue(row.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, row.key) }) : null;
   const usualBase = u && stats ? u.value : null;
   if (u && stats) u = { ...u, value: u.value * stats.mult, rough: false };
   // an NPC pays the same for any copy, stats or not, and takes any stack; sets (stars) are priced as a whole

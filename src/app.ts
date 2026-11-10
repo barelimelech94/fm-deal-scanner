@@ -63,7 +63,7 @@ export class App {
 
   constructor() {
     const book = this.store.loadBook();
-    this.engine = { market: new MarketIndex(this.store.loadMarket()), book, settings: this.store.loadSettings(), now: () => Date.now() };
+    this.engine = { market: new MarketIndex(this.store.loadMarket()), facts: new Map(), book, settings: this.store.loadSettings(), now: () => Date.now() };
     pruneOld(book, Date.now());
     this.region = this.store.loadRegion();
     this.itemsRegion = this.store.loadItemsRegion();
