@@ -1,6 +1,6 @@
 import { equipFact, type Engine } from '../engine';
 import type { AppraisalEntry, AppraisalMode, AppraisalSortCol, StatValue, UsualSource } from '../lib/types';
-import { isSetItem, npcSellPrice } from '../market/marketIndex';
+import { isRough, isSetItem, npcSellPrice } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
 import { statValue } from '../tooltip/statValue';
 
@@ -58,12 +58,12 @@ export function appraiseEntry(e: Engine, entry: AppraisalEntry, mode: AppraisalM
   const set = isSetItem(mk, name);
   const typed = entry.price && entry.price > 0 ? entry.price : null;
   const u = typed != null ? { value: typed, src: 'line' as const, rough: false } : usualPrice(it, mk, e.settings, e.now(), mode);
-  // stats read from a hover tooltip scale an equip's price, and settle a rough market price, as in the shop
+  // stats read from a hover tooltip scale an equip's price, and settle "copies sell for very different prices", as in the shop
   const stats = entry.tip && typed == null
     ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, entry.key) })
     : null;
   let unit = u ? u.value * (stats?.mult ?? 1) : null, src: LineSource | null = u?.src ?? null;
-  let rough = !!u?.rough && !stats;
+  let rough = !!u?.rough && isRough(mk, stats != null);
   // an NPC pays its price for any copy, so nothing is worth less: with no market price it is the price, and it lifts
   // a lower one. A price typed on the line stays as typed.
   const npc = set ? null : npcSellPrice(mk, e.settings.npcRatio);

@@ -75,8 +75,13 @@ export function npcSellPrice(mk: MarketItem | null, ratio: number): number | nul
   return v > 0 ? v : null;
 }
 
-/** fewer than 5 sales, or copies that sell for very different prices */
-export const isRough = (mk: MarketItem | null): boolean => !!mk && /[lw]/.test(mk.f ?? '');
+const flagged = (mk: MarketItem | null, flag: 'l' | 'w'): boolean => !!mk && (mk.f ?? '').includes(flag);
+
+/**
+ * Fewer than 5 sales, or copies that sell for very different prices. Stats read off a copy settle the second
+ * (the stats are the difference), not the first.
+ */
+export const isRough = (mk: MarketItem | null, statsRead = false): boolean => flagged(mk, 'l') || (!statsRead && flagged(mk, 'w'));
 
 /** The tracker's numbers for an item, in words; with its own age when its price is older than the rest. */
 export function marketTip(mk: MarketItem | null, now: number = Date.now()): string {
