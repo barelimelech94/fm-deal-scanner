@@ -53,13 +53,13 @@ export type StatusState = 'idle' | 'busy' | 'watching' | 'shop';
 /** The status line: a state for its dot, and the words, as HTML. */
 export interface ScanStatus { state: StatusState; html: string }
 
-export const IDLE = '<b>Not capturing.</b> Press Start capture and pick the MapleStory window.';
+const IDLE = '<b>Not capturing.</b> Press Start capture and pick the MapleStory window.';
 const PREVIEW = 'Screen capture is blocked because this page is open inside a preview or frame. Open it in its own Chrome tab.';
 const MACPERM = 'macOS refused the capture. In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn Chrome off and on again, then <b>quit Chrome with ⌘Q</b> and reopen it. Chrome only picks up that setting after a full restart.';
 const READER_FAILED = 'The text reader failed to load. Check your internet connection and reload this page.';
 
 /** Why a capture could not start, in words the person can act on. */
-export function captureErrorText(e: CaptureFailed): string {
+function captureErrorText(e: CaptureFailed): string {
   const text = e.kind === 'unsupported' ? PREVIEW : e.kind === 'blocked-by-system' ? MACPERM
     : e.kind === 'cancelled' ? `Capture was cancelled. Press <b>Start capture</b>, choose the <b>Window</b> tab, select MapleStory and press <b>Share</b>. If no picker appeared at all: ${MACPERM}`
     : 'Capture failed.';

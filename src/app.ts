@@ -1,14 +1,13 @@
-import { cleanEntries } from './appraisal/entries';
 import { HoverScanner } from './appraisal/hoverScan';
 import { ScreenCapture } from './capture/screen';
 import { Ticker } from './capture/ticker';
 import type { Engine } from './engine';
 import type { HoverEvent } from './appraisal/hovers';
-import type { MarketData, PriceBook, Region, Settings, ViewName } from './lib/types';
+import type { MarketData, Region, Settings, ViewName } from './lib/types';
 import { loadCatalog } from './market/catalog';
 import { MarketIndex } from './market/marketIndex';
 import { Reader } from './ocr/reader';
-import { isPriceBook, mergeBackup, pruneOld } from './pricing/priceBook';
+import { pruneOld } from './pricing/priceBook';
 import { ScanController, type ScanChange } from './scan/controller';
 import { Scanner } from './scan/scanner';
 import { ShopSession, type Deal } from './shop/session';
@@ -16,8 +15,9 @@ import { SaveLater } from './store/saveLater';
 import { Storage } from './store/storage';
 import { Calibration, type AreaKind } from './ui/calibrate';
 import { CaptureBar } from './ui/captureBar';
+import { DataGroup } from './ui/dataGroup';
 import { DealsView } from './ui/dealsView';
-import { $, onFile } from './ui/dom';
+import { $ } from './ui/dom';
 import { InventoryView } from './ui/inventoryView';
 import { Overlay } from './ui/overlay';
 import { PricesView, tidyBook } from './ui/pricesView';
@@ -46,13 +46,13 @@ export class App {
   private readonly inventory: InventoryView;
   private readonly prices: PricesView;
   private readonly settingsView: SettingsView;
+  private readonly dataGroup: DataGroup;
   private readonly binder: SettingsBinder;
   private region: Region | null;
   /** the area marked for your items' hovers */
   private itemsRegion: Region | null;
   /** icon addresses that failed to load: show the emoji instead from now on */
   private readonly failedIcons = new Set<string>();
-  private wipeArmed = 0;
   /** rises when anything that prices items changes: a setting, the market prices, your prices, the item pictures */
   private data = 0;
   /** the price book is saved a second after its last change */
@@ -99,6 +99,11 @@ export class App {
       diag: () => this.diag(),
       seen: () => this.scanner.lastCrop,
     });
+    this.dataGroup = new DataGroup({
+      engine: e, regions: () => ({ region: this.region, itemsRegion: this.itemsRegion }),
+      entries: () => this.inventory.entries(), importEntries: (list) => this.inventory.importEntries(list),
+      restore: (r) => this.restore(r), saveBook: () => this.saveBook(), changed: () => this.pricesChanged(),
+    });
     this.binder = new SettingsBinder(e.settings, (key) => this.settingChanged(key));
     this.bar = new CaptureBar(this.controller, {
       start: () => { this.chime.unlock(); void this.controller.startCapture(); },
@@ -128,10 +133,10 @@ export class App {
     this.inventory.wire();
     this.prices.wire();
     this.settingsView.wire();
-    this.wireData();
+    this.dataGroup.wire();
     this.binder.bind(document);
     const fixed = tidyBook(this.engine);
-    if (fixed) { this.saveBook(); $('dataMsg').textContent = fixed; }
+    if (fixed) { this.saveBook(); this.dataGroup.say(fixed); }
     this.shell.start();
     document.addEventListener('error', (e) => { const t = e.target as Element | null; if (t?.tagName === 'IMG') this.iconFailed(t as HTMLImageElement); }, true);
     // the price book waiting to be saved is saved before the page goes, or goes to the background
@@ -243,42 +248,21 @@ export class App {
     return this.store.saveMarket(m);
   }
 
-  private wireData(): void {
-    $('btnExport').addEventListener('click', () => {
-      const body = JSON.stringify({ version: 1, exported: new Date().toISOString(), db: this.engine.book, settings: this.settings, region: this.region, appraisal: this.inventory.entries() }, null, 1);
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
-      a.download = `fm-deal-scanner-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      $('dataMsg').textContent = 'Exported.';
-    });
-    onFile('fileImport', async (f) => {
-      try {
-        const j = JSON.parse(await f.text()) as { db?: unknown; region?: Region | null; appraisal?: unknown };
-        if (!isPriceBook(j.db)) throw new Error('not a scanner backup');
-        const n = mergeBackup(this.engine.book, j.db as PriceBook);
-        if (j.region) { this.region = j.region; this.store.saveRegion(j.region); }
-        tidyBook(this.engine);
-        this.saveBook();
-        const lines = this.inventory.importEntries(cleanEntries(j.appraisal));
-        this.pricesChanged();
-        $('dataMsg').textContent = `Imported ${n} item${n === 1 ? '' : 's'}.` + (lines ? ` Added ${lines} appraisal line${lines === 1 ? '' : 's'}.` : '');
-      } catch { $('dataMsg').textContent = 'That file is not a scanner backup.'; }
-    });
-    const wipe = $('btnWipe');
-    wipe.addEventListener('click', () => {
-      if (Date.now() - this.wipeArmed > 4000) {
-        this.wipeArmed = Date.now();
-        wipe.textContent = 'Click again to clear';
-        setTimeout(() => { wipe.textContent = 'Clear all sightings'; }, 4000);
-        return;
-      }
-      for (const it of Object.values(this.engine.book.items)) it.s = [];
-      this.wipeArmed = 0; wipe.textContent = 'Clear all sightings';
-      this.saveBook(); this.pricesChanged();
-      $('dataMsg').textContent = 'Sightings cleared. Your typed prices stay.';
-    });
+  /**
+   * A backup's settings and marked areas, put in place. The view and the scan mode stay as they are: they are
+   * where the person is now, not something to restore.
+   */
+  private restore(r: { settings?: Settings; region?: Region; itemsRegion?: Region }): void {
+    if (r.region) { this.region = r.region; this.store.saveRegion(r.region); }
+    if (r.itemsRegion) { this.itemsRegion = r.itemsRegion; this.store.saveItemsRegion(r.itemsRegion); }
+    if (r.settings) {
+      const { view, mode } = this.settings;
+      Object.assign(this.settings, r.settings, { view, mode });
+      this.saveSettings();
+      this.binder.show();
+      this.controller.restartTicker();
+    }
+    if (r.settings || r.region) this.controller.areaChanged();
   }
 
   // ---------- drawing ----------

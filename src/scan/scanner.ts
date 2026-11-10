@@ -52,7 +52,6 @@ export interface ScannerHooks {
 
 /** One pass over a frame: find the list and any tooltip, read them, and hand the results to the shop. */
 export class Scanner<F, I> {
-  busy = false;
   /** where the list was found in the last frame */
   found: Region | null = null;
   /** screen pixels per game pixel, from the last list found */
@@ -108,13 +107,8 @@ export class Scanner<F, I> {
 
   /** The slow part: reads the copies and updates the shop. */
   async read(p: Prepared<I>): Promise<void> {
-    this.busy = true;
-    try {
-      await this.readList(p.list, p.opts, !!p.tip);
-      if (p.tip) await this.readTooltip(p.tip);
-    } finally {
-      this.busy = false;
-    }
+    await this.readList(p.list, p.opts, !!p.tip);
+    if (p.tip) await this.readTooltip(p.tip);
   }
 
   async scan(frame: F, opts: ScanOptions): Promise<void> { await this.read(this.prepare(frame, opts)); }

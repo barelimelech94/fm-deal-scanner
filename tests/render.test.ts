@@ -83,10 +83,8 @@ describe('SaveLater', () => {
     s.flush();
     expect(save).not.toHaveBeenCalled();
     s.request();
-    expect(s.waiting).toBe(true);
     s.flush();
     expect(save).toHaveBeenCalledTimes(1);
-    expect(s.waiting).toBe(false);
     vi.advanceTimersByTime(2000);
     expect(save).toHaveBeenCalledTimes(1);
   });

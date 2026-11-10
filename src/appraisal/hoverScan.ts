@@ -28,7 +28,6 @@ export interface HoverScanOptions {
 
 /** One pass over a frame for the appraisal: find the hovered tooltip, read it, and hand the item to the collector. */
 export class HoverScanner<F, I> {
-  busy = false;
   /** for troubleshooting: what the reader saw last */
   lastLines: string[] = [];
 
@@ -49,12 +48,9 @@ export class HoverScanner<F, I> {
 
   /** The slow part: reads the tooltip and puts the item on the appraisal. */
   async read(p: HoverPrep<I>): Promise<HoverEvent> {
-    this.busy = true;
-    try {
-      const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
-      this.lastLines = lines;
-      return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
-    } finally { this.busy = false; }
+    const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
+    this.lastLines = lines;
+    return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
   }
 
   async scan(frame: F, o: HoverScanOptions): Promise<HoverEvent | null> {

@@ -9,8 +9,6 @@ export class SaveLater {
     this.timer = setTimeout(() => this.flush(), this.ms);
   }
 
-  get waiting(): boolean { return this.timer != null; }
-
   flush(): void {
     if (!this.timer) return;
     clearTimeout(this.timer);

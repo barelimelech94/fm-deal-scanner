@@ -52,10 +52,10 @@ const END: Partial<Record<SettingGroup, string>> = {
 };
 
 const DATA = `<section class="panel quiet" aria-labelledby="hData"><div class="panel-head"><h2 id="hData">Data</h2></div><div class="panel-body">
-  <p class="note">Everything lives in this browser only.</p>
+  <p class="note">Everything is kept in this browser only. Market prices are not in the backup.</p>
   <div class="row">
-    <button class="btn" id="btnExport">Export</button>
-    <span class="btn filebtn">Import<input type="file" id="fileImport" accept="application/json,.json"></span>
+    <button class="btn" id="btnExport">Export backup</button>
+    <span class="btn filebtn">Import backup<input type="file" id="fileImport" accept="application/json,.json"></span>
     <button class="btn ghost" id="btnWipe">Clear all sightings</button>
   </div>
   <p class="note" id="dataMsg"></p>

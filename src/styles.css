@@ -233,7 +233,6 @@ tr.ap-unpriced td:first-child { box-shadow: inset 3px 0 0 var(--high); }
 
 .aprough { color: var(--high); margin-top: 8px; }
 .aptoolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 12px 0 6px; }
-.aptoolbar .field { min-width: 190px; }
 .apstate { align-self: center; padding: 3px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
 .apstate[data-on="true"] { background: var(--deal-bg); color: var(--deal); border-color: var(--deal); }
 .aphint { margin: 2px 0 8px; }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
 import { loadPng, placeOn, scaleBy } from '../tests/helpers/image';
@@ -126,7 +127,7 @@ test('keeps your data from the single-file scanner', async ({ page }) => {
     settings: {}, region: null,
   };
   await page.setInputFiles('#fileImport', { name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
-  await expect(page.locator('#dataMsg')).toHaveText('Imported 1 item.');
+  await expect(page.locator('#dataMsg')).toHaveText('Imported 1 item. Restored your settings.');
   await view(page, 'prices');
   const row = page.locator('#bookTable tbody tr', { hasText: 'Lemona' });
   await expect(row.locator('input[data-field="manualRef"]')).toHaveValue('25,000');
@@ -570,6 +571,46 @@ test('an unchanged screen rewrites nothing, and the price book is kept even when
   await view(page, 'prices');
   await expect(page.locator('#bookTable tbody')).toContainText('Wolbi Throwing Stars');
   await expect(page.locator('#bookTable tbody')).toContainText('Dark Guardian');
+  expect(errors).toEqual([]);
+});
+
+test('a backup restores the settings and both marked areas', async ({ page }) => {
+  const { errors } = await open(page);
+  const shop = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, items = { x: 0.5, y: 0.5, w: 0.2, h: 0.3 };
+  await page.evaluate(([a, b]) => {
+    localStorage.setItem('fmscan.v1.region.v4', JSON.stringify(a));
+    localStorage.setItem('fmscan.v1.region.items', JSON.stringify(b));
+  }, [shop, items]);
+  await page.reload();
+  await view(page, 'settings');
+  await expect(page.locator('#view-settings')).toContainText('Market prices are not in the backup.');
+  await page.fill('#set-discount', '40');
+  await page.press('#set-discount', 'Tab');
+  await page.uncheck('#set-sound');
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#btnExport')]);
+  const file = await download.path();
+  const backup = JSON.parse(readFileSync(file, 'utf8'));
+  expect(backup).toMatchObject({ version: 2, settings: { discount: 40, sound: false }, region: shop, itemsRegion: items });
+
+  // everything gone, then the backup back
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await view(page, 'settings');
+  await expect(page.locator('#set-discount')).toHaveValue('25');
+  await page.setInputFiles('#fileImport', { name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  await expect(page.locator('#dataMsg')).toHaveText('Imported 0 items. Restored your settings and the marked areas.');
+  await expect(page.locator('#set-discount')).toHaveValue('40');
+  await expect(page.locator('#set-sound')).not.toBeChecked();
+  const stored = await page.evaluate(() => ['settings', 'region.v4', 'region.items'].map((k) => JSON.parse(localStorage.getItem(`fmscan.v1.${k}`)!)));
+  expect(stored).toEqual([expect.objectContaining({ discount: 40, sound: false }), shop, items]);
+  await page.reload();
+  await view(page, 'settings');
+  await expect(page.locator('#set-discount')).toHaveValue('40');
+
+  // a file that is not a backup changes nothing
+  await page.setInputFiles('#fileImport', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') });
+  await expect(page.locator('#dataMsg')).toHaveText('That file is not a scanner backup.');
   expect(errors).toEqual([]);
 });
 
