@@ -15,6 +15,11 @@ export type AppraisalSortCol = 'added' | 'name' | 'qty' | 'unit' | 'total';
 /** What the open shop's table is ordered by. `best` is the default: deals first, then by how far under the usual price. */
 export type ShopSortCol = 'best' | 'name' | 'unit' | 'usual' | 'pct' | 'profit';
 
+/** What the scanner looks for: other players' shops, or your own items' tooltips. One at a time. */
+export type ScanMode = 'deals' | 'inventory';
+/** The page's views, one shown at a time. */
+export type ViewName = 'deals' | 'inventory' | 'prices' | 'settings';
+
 export interface Settings {
   /** % under the usual price a listing must be to count as a deal */
   discount: number;
@@ -51,12 +56,19 @@ export interface Settings {
   appraisalArea: 'any' | 'marked';
   /** % of the appraisal's total you offer or ask for taking everything */
   bulkOffer: number;
+  /** what the scanner looks for; opening the Deals or the Inventory view sets it */
+  mode: ScanMode;
+  /** the view shown last */
+  view: ViewName;
+  /** % a store price is moved from the item's price: "List at" is that price plus this */
+  storeAdjust: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   discount: 25, minProfit: 3000, fee: 3, base: 'median', minSeen: 3, interval: 0.8, sound: true,
   market: 'on', area: 'auto', readStats: 'on', statPct: 8, slotWorth: 1,
   npcRatio: 50, shopSort: 'best', shopSortDir: 1, appraisalSort: 'added', appraisalSortDir: 1, appraisalMode: 'fair', appraisalArea: 'any', bulkOffer: 100,
+  mode: 'deals', view: 'deals', storeAdjust: 0,
 };
 
 /** [time ms, price per unit, units] */
