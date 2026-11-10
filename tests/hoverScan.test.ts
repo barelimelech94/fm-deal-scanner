@@ -181,6 +181,20 @@ describe('HoverCollector', () => {
     expect(data.entries[1]!.unsure).toBeUndefined();
   });
 
+  it('names the line a hover added, counted again or fixed', () => {
+    const { data, c } = make();
+    const added = c.ingest(tip('Leaf'), at(100));
+    const lemona = c.ingest(tip('Lemona', true), at(400));
+    const leaf = data.entries[0]!.id;
+    expect(added).toMatchObject({ kind: 'added', entryId: leaf });
+    expect(lemona).toMatchObject({ kind: 'added', entryId: data.entries[1]!.id });
+    expect(c.ingest(tip('Leaf'), at(104))).toMatchObject({ kind: 'again', entryId: leaf });
+    expect(c.ingest(tip('Leaf'), at(104), 12)).toMatchObject({ kind: 'fixed', entryId: leaf });
+    expect(c.ingest(tip('Leaf'), at(700), 3)).toMatchObject({ kind: 'added', entryId: leaf });   // another stack, the same line
+    expect(c.unreadable(['', 'x']).entryId).toBeUndefined();
+    expect(c.undo()!.entryId).toBeUndefined();
+  });
+
   it('adds another stack of the same item to its line', () => {
     const { data, c } = make();
     c.ingest(tip('Red Potion'), at(100), 84);

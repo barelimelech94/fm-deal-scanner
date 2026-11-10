@@ -11,6 +11,8 @@ export interface HoverEvent {
   text: string;
   /** the quantity is not known: say so, the person types it */
   warn?: boolean;
+  /** the appraisal line the hover added to, counted again or fixed (`added`, `again` and `fixed` only) */
+  entryId?: string;
 }
 
 /** Where the hovered slot is: the tooltip's corner and the slot's width, in frame pixels. */
@@ -79,9 +81,9 @@ export class HoverCollector {
         there.qty = clampQty(there.qty - known.qty + count);
         known.qty = count; known.unsure = false;
         this.refresh(there);
-        return (this.last = { kind: 'fixed', text: `${made.name}: count is ${count}` });
+        return (this.last = { kind: 'fixed', text: `${made.name}: count is ${count}`, entryId: there.id });
       }
-      return (this.last = { kind: 'again', text: `${made.name} is already counted` });
+      return (this.last = { kind: 'again', text: `${made.name} is already counted`, entryId: there.id });
     }
     if (known) this.slots = this.slots.filter((s) => s !== known);   // its line was removed: count it afresh
 
@@ -93,7 +95,7 @@ export class HoverCollector {
     this.undos.push({ slot, created: entry === made });
     this.refresh(entry);
     return (this.last = {
-      kind: 'added', text: `Added ${made.name}${made.qty > 1 ? ` ×${made.qty}` : ''}${unsure ? ': type how many you have in its Qty box' : ''}`, warn: unsure,
+      kind: 'added', text: `Added ${made.name}${made.qty > 1 ? ` ×${made.qty}` : ''}${unsure ? ': type how many you have in its Qty box' : ''}`, warn: unsure, entryId: entry.id,
     });
   }
 
