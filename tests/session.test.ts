@@ -91,6 +91,7 @@ describe('reading a shop', () => {
   it('starts over in a different shop', () => {
     const { s } = setup();
     s.read(SHOP, false);
+    s.read([], true);   // the list is gone for a moment between two shops
     s.read([raw('Traus', 50000), raw('Axe Pole Arm', 15000)], false);
     expect(keys(s)).toEqual(['axe pole arm|1|15000', 'traus|1|50000']);
   });
@@ -109,6 +110,105 @@ describe('reading a shop', () => {
     expect(changed).toBe(true);
     expect(Object.keys(e.book.items)).toEqual(['traus']);
     expect(e.book.items.traus!.s[0]![1]).toBe(50000);
+  });
+});
+
+describe('listings that sell', () => {
+  const states = (s: ShopSession) => [...s.rows.values()].map((r) => `${r.key}:${r.greyed ? 'sold' : 'live'}×${r.count}`).sort();
+
+  it('replaces a live listing with its sold twin', () => {
+    const { s } = setup();
+    s.read([raw('Traus', 30000)], false);
+    s.read([raw('Traus', 30000, { greyed: true })], false);
+    expect(states(s)).toEqual(['traus:sold×1']);
+    expect(s.listingCount()).toBe(1);
+  });
+
+  it('takes the copies bought off the live count', () => {
+    const { s } = setup();
+    const t = (greyed = false) => raw('Traus', 50000, { greyed });
+    s.read([t(), t(), t()], false);
+    expect(states(s)).toEqual(['traus:live×3']);
+    s.read([t(), t(true), t(true)], false);   // two of three bought
+    expect(states(s)).toEqual(['traus:live×1', 'traus:sold×2']);
+    s.read([t(), t(true), t(true)], false);   // nothing new
+    expect(states(s)).toEqual(['traus:live×1', 'traus:sold×2']);
+    s.read([t(true), t(true), t(true)], false);   // the last one too
+    expect(states(s)).toEqual(['traus:sold×3']);
+  });
+
+  it('does the same on a live screen, once the sold row is confirmed', () => {
+    const { s } = setup();
+    const t = (greyed = false) => raw('Traus', 50000, { greyed });
+    s.read([t(), t()], true); s.read([t(), t()], true);
+    s.read([t(), t(true)], true);
+    expect(states(s)).toEqual(['traus:live×2']);   // one read is not enough
+    s.read([t(), t(true)], true);
+    expect(states(s)).toEqual(['traus:live×1', 'traus:sold×1']);
+  });
+
+  it('leaves listings already sold when the shop opened alone', () => {
+    const { s } = setup();
+    s.read([raw('Traus', 50000), raw('Traus', 50000, { greyed: true })], false);
+    expect(states(s)).toEqual(['traus:live×1', 'traus:sold×1']);
+  });
+
+  it('keeps a live copy that is still on screen', () => {
+    const { s } = setup();
+    s.read([raw('Traus', 50000)], false);
+    s.read([raw('Traus', 50000), raw('Traus', 50000, { greyed: true })], false);   // a second copy seen only sold
+    expect(states(s)).toEqual(['traus:live×1', 'traus:sold×1']);
+  });
+});
+
+describe('the next shop', () => {
+  const at = (name: string, price: number, fy: number) => raw(name, price, { fy });
+  const AB = [at('Traus', 50000, 0.30), at('Lemona', 19999, 0.34)];
+
+  it('starts over after a gap when nothing is where it was, even with one listing', () => {
+    const { s, tick, e } = setup();
+    s.read(AB, false);
+    const since = s.since;
+    s.read([], true);
+    tick(5000);
+    s.read([at('Axe Pole Arm', 15000, 0.30)], false);
+    expect(keys(s)).toEqual(['axe pole arm|1|15000']);
+    expect(s.since).toBe(e.now());
+    expect(s.since).not.toBe(since);
+  });
+
+  it('starts over when the one shared listing sits somewhere else', () => {
+    const { s } = setup();
+    s.read(AB, false);
+    s.read([], true);
+    s.read([at('Bronze Chain Boots', 9999, 0.30), at('Traus', 50000, 0.34)], false);
+    expect(keys(s)).toEqual(['bronze chain boots|1|9999', 'traus|1|50000']);
+  });
+
+  it('is the same shop when a listing is back where it was', () => {
+    const { s, tick } = setup();
+    s.read(AB, false);
+    const since = s.since;
+    s.read([], true);
+    tick(5000);
+    s.read([at('Traus', 50000, 0.305), at('Dark Guardian', 79999, 0.38)], false);   // within half a row
+    expect(keys(s)).toEqual(['dark guardian|1|79999', 'lemona|1|19999', 'traus|1|50000']);
+    expect(s.since).toBe(since);
+  });
+
+  it('keeps the deal log across shops', () => {
+    const { s } = setup();
+    s.read([at('Traus', 30000, 0.3)], false);
+    s.read([], true);
+    s.read([at('Lemona', 19999, 0.5)], false);
+    expect(s.deals.map((d) => d.key)).toEqual(['traus']);
+  });
+
+  it('does not start over without a gap', () => {
+    const { s } = setup();
+    s.read(AB, false);
+    s.read([at('Dark Guardian', 79999, 0.30), at('Axe Pole Arm', 15000, 0.34)], false);
+    expect(s.rows.size).toBe(4);
   });
 });
 
