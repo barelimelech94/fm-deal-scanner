@@ -236,7 +236,8 @@ export class ScanController<F, I> {
       return (this.next ??= this.running.then(() => { this.next = null; return this.tick(true); }));
     }
     if (!this.d.reader.ready || !this.canScan) return Promise.resolve();
-    this.running = this.check(force).finally(() => { this.running = null; });
+    // a check never fails its callers: what went wrong is logged, and the next check runs as usual
+    this.running = this.check(force).catch((e: unknown) => { console.error(e); }).finally(() => { this.running = null; });
     return this.running;
   }
 
@@ -245,16 +246,18 @@ export class ScanController<F, I> {
     const mode = this.mode, live = !this.still;
     const shopV = session.version, hoverV = collector.version;
     let event: HoverEvent | null = null;
-    const g = this.still ? { frame: this.still, done: () => {} } : await this.d.capture.grab();
-    if (!g) return;
     let list, tip;
     try {
-      if (mode === 'deals' && !this.needsShopArea) {
-        list = shop.prepare(g.frame, { auto: this.autoArea, region: this.d.shopRegion(), readStats: engine.settings.readStats !== 'off', live, force });
-      } else if (mode === 'inventory' && collector.scanning) {
-        tip = hovers.prepare(g.frame, { live, area: this.d.itemsArea() });
-      }
-    } finally { g.done(); }
+      const g = this.still ? { frame: this.still, done: () => {} } : await this.d.capture.grab();
+      if (!g) return;
+      try {
+        if (mode === 'deals' && !this.needsShopArea) {
+          list = shop.prepare(g.frame, { auto: this.autoArea, region: this.d.shopRegion(), readStats: engine.settings.readStats !== 'off', live, force });
+        } else if (mode === 'inventory' && collector.scanning) {
+          tip = hovers.prepare(g.frame, { live, area: this.d.itemsArea() });
+        }
+      } finally { g.done(); }
+    } catch (e) { console.error(e); return; }
     // a check that ends after the mode changed is dropped: what it read is for the mode before
     const keep = () => this.mode === mode;
     if (list) { try { await shop.read(list, keep); } catch (e) { console.error(e); } }

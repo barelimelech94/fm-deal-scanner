@@ -55,10 +55,11 @@ function setup(o: { region?: Region | null } = {}) {
   };
   const capture = new FakeCapture();
   const ticker = { ms: 0, started: 0, stopped: 0 };
+  const shop = new Scanner(pixelsAdapter, reader, session, e);
   const c = new ScanController<Pixels, Buffer>({
     engine: e, capture, reader, session, collector,
     repeat: () => ({ start: (ms) => { ticker.ms = ms; ticker.started++; }, stop: () => { ticker.stopped++; } }),
-    shop: new Scanner(pixelsAdapter, reader, session, e),
+    shop,
     hovers: new HoverScanner(pixelsAdapter, reader, collector, e),
     shopRegion: () => o.region ?? null,
     itemsArea: () => null,
@@ -66,7 +67,7 @@ function setup(o: { region?: Region | null } = {}) {
   const changes: ScanChange['kind'][] = [];
   c.on((x) => changes.push(x.kind));
   return {
-    e, c, data, session, collector, capture, ticker, changes,
+    e, c, data, session, collector, capture, ticker, changes, shop,
     reads: () => reads.length,
     answer: (l: OcrLine[]) => { lines = l; },
     /** Holds the next read until the returned function is called. */
@@ -261,6 +262,24 @@ describe('ScanController', () => {
       const n = reads();
       await Promise.all([c.tick(true), c.tick(true), c.tick(true), c.tick()]);
       expect(reads() - n).toBe(2);   // the one under way, and one more
+    });
+
+    it('gets over a check that failed: a forced check asked for later still runs', async () => {
+      const { c, shop, reads, hold } = setup();
+      await c.useStill(SHOP);
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(shop, 'prepare').mockImplementationOnce(() => { throw new Error('no 2d canvas'); });
+      // a check that fails, with a forced one asked for while it runs
+      await expect(Promise.all([c.tick(true), c.tick(true)])).resolves.toBeDefined();
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
+      const n = reads();
+      const release = hold();
+      const later = c.tick(true);   // waits in the reader
+      const queued = c.tick(true);  // asked for while it runs: runs after it
+      release();
+      await expect(Promise.all([later, queued])).resolves.toBeDefined();
+      expect(reads() - n).toBe(2);
     });
 
     it('counts every check', async () => {
