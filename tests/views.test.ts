@@ -73,7 +73,7 @@ describe('shop rows', () => {
   });
   it('sums up the shop', () => {
     const { s, rows } = shop([raw('Dark Guardian', 40000), raw('Lemona', 30000), raw('Lemona', 30000)]);
-    expect(shopMeta(s, rows)).toMatch(/^3 listings, 1 deal, opened /);
+    expect(shopMeta(s, rows)).toBe('3 listings, 1 deal');
   });
 });
 

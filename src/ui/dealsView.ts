@@ -1,8 +1,10 @@
 import type { Engine } from '../engine';
 import { cap, clock, esc } from '../lib/format';
 import type { DisplayRow, ShopSession } from '../shop/session';
+import { dealsSteps, ShopSearch } from './dealsHelp';
 import { $ } from './dom';
 import { DrawGate, setHidden, setHtml, setText } from './render';
+import { SetupSteps } from './setupSteps';
 import {
   cleanSort, dealLine, dealsHtml, freshDeal, hoverText, iconHtml, nextSort, shopMeta, shopRowHtml, sortRows, type ShopSort,
 } from './views';
@@ -19,11 +21,23 @@ export interface DealsDeps {
   shown(): boolean;
   /** changes when the shop or anything that prices it changed */
   version(): string;
+  capturing(): boolean;
+  /** capture runs and looks for shops (deals mode) */
+  looking(): boolean;
+  /** the Get started steps' buttons, and the offer to mark the shop's area */
+  openPrices(): void;
+  startCapture(): void;
+  markShop(): void;
 }
 
-/** The Deals view: the open shop with its deal banner and hovered item, and the deals found this session. */
+/**
+ * The Deals view: Get started until it is done, then the open shop with the deal rules, its deal banner and
+ * hovered item, and the deals found this session.
+ */
 export class DealsView {
   private readonly gate = new DrawGate();
+  private readonly search = new ShopSearch();
+  private steps: SetupSteps | null = null;
 
   constructor(private readonly d: DealsDeps) {}
 
@@ -44,6 +58,8 @@ export class DealsView {
   }
 
   wire(): void {
+    this.steps = new SetupSteps($('dealsSetup'), $('dealsSteps'));
+    $('btnMarkShopHere').addEventListener('click', () => this.d.markShop());
     $('btnClearDeals').addEventListener('click', () => { this.d.session.clearDeals(); this.render(); this.d.overlay(); });
     // click a column to order by it, again to flip; the choice is kept for the next shop
     for (const th of document.querySelectorAll<HTMLElement>('#shopTable th.sortable')) {
@@ -60,12 +76,25 @@ export class DealsView {
     b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
   }
 
+  /** Whether a shop was ever read: the price book has a sighting. */
+  private sighted(): boolean {
+    for (const it of Object.values(this.d.engine.book.items)) if (it.s.length) return true;
+    return false;
+  }
+
   /**
-   * Draws the view while it is shown, when the shop or the prices changed since it last drew. `force` draws
-   * anyway (it was just shown, or time moved on); only what differs is written.
+   * Draws the view while it is shown, when the shop, the prices or the capture changed since it last drew.
+   * `force` draws anyway (it was just shown, or time moved on); only what differs is written. Called whenever
+   * the scanning tells of a change, shown or not, so the time spent looking for a shop is counted throughout.
    */
   render(force = false): void {
-    if (!this.d.shown() || !this.gate.due(this.d.version(), force)) return;
+    const { session, engine } = this.d;
+    const notFinding = this.search.update({ looking: this.d.looking(), shopOpen: session.open }, engine.now());
+    if (!this.d.shown()) return;
+    const setup = { prices: engine.market.priced, capturing: this.d.capturing(), sighted: this.sighted(), shopOpen: session.open };
+    if (!this.gate.due(`${this.d.version()}|${JSON.stringify(setup)}|${notFinding}`, force)) return;
+    this.steps?.render(dealsSteps(setup, { openPrices: () => this.d.openPrices(), startCapture: () => this.d.startCapture() }));
+    setHidden($('shopHelp'), !notFinding);
     this.renderHeaders();
     this.renderShop();
     this.renderDeals();
@@ -94,7 +123,7 @@ export class DealsView {
     setText($('shopMeta'), shopMeta(session, rows));
     const hv = hoverText(session.hover, engine);
     setHidden($('hoverLine'), !hv);
-    if (hv && session.hover) setHtml($('hoverLine'), `${this.icon(session.hover.key)}<span><b>Hovered</b> ${esc(hv)}</span>`);
+    if (hv && session.hover) setHtml($('hoverLine'), `${this.icon(session.hover.key)}<span><b>Hovered:</b> ${esc(hv)}</span>`);
     const deal = freshDeal(session, engine.now());
     setHidden($('dealBanner'), !deal);
     if (deal) {

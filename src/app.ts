@@ -86,6 +86,8 @@ export class App {
     this.deals = new DealsView({
       engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), overlay: () => this.renderOverlay(),
       shown: shown('deals'), version: shopAndData,
+      capturing: () => this.capture.active, looking: () => this.capture.active && this.controller.mode === 'deals',
+      openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), markShop: () => void this.calibration.open('shop'),
     });
     this.prices = new PricesView({
       engine: e, failed, saveBook: () => this.saveBook(), setMarket: (m) => this.setMarket(m), changed: () => this.pricesChanged(),
@@ -106,7 +108,7 @@ export class App {
     });
     this.binder = new SettingsBinder(e.settings, (key) => this.settingChanged(key));
     this.bar = new CaptureBar(this.controller, {
-      start: () => { this.chime.unlock(); void this.controller.startCapture(); },
+      start: () => this.startCapture(),
       stop: () => this.controller.stopCapture(),
       overlay: () => void this.openOverlay(),
       dismissError: () => this.controller.dismissError(),
@@ -167,9 +169,10 @@ export class App {
   private changed(c: ScanChange): void {
     if (c.kind === 'shop') { this.deals.render(); this.prices.render(); }
     else if (c.kind === 'hover') this.hoverChanged(c.event);
-    else if (c.kind === 'status') { this.bar.render(); if (this.shell.isShown('settings')) this.settingsView.render(); }
+    else if (c.kind === 'status') { this.bar.render(); this.deals.render(); if (this.shell.isShown('settings')) this.settingsView.render(); }
     else {
       document.body.dataset.scans = String(this.controller.scans);
+      this.deals.render();   // it counts how long capture has looked for a shop
       if (this.shell.isShown('settings')) this.settingsView.renderTrouble();
       return;
     }
@@ -186,6 +189,11 @@ export class App {
     if (this.settings.sound) this.chime.play();
     if (document.hidden) document.title = `● Deal: ${d.name}`;
     this.deals.flash();
+  }
+
+  private startCapture(): void {
+    this.chime.unlock();
+    void this.controller.startCapture();
   }
 
   private setScanning(on: boolean): boolean {

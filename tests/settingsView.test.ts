@@ -130,8 +130,32 @@ describe('the settings binder', () => {
     expect(changed).toEqual(['sound']);
   });
 
-  it('will not bind a control to a setting that does not exist', () => {
+  it('turns a setting on and off from a button, in step with its switch', () => {
+    const { settings, changed } = bound('<button id="b" data-setting="sound"></button><input type="checkbox" id="s" data-setting="sound">');
+    const b = document.querySelector<HTMLButtonElement>('#b')!, s = document.querySelector<HTMLInputElement>('#s')!;
+    expect(b.getAttribute('aria-pressed')).toBe('true');
+    b.click();
+    expect(settings.sound).toBe(false);
+    expect([b.getAttribute('aria-pressed'), s.checked]).toEqual(['false', false]);
+    s.checked = true;
+    s.dispatchEvent(new Event('change'));
+    expect(b.getAttribute('aria-pressed')).toBe('true');
+    expect(changed).toEqual(['sound', 'sound']);
+  });
+
+  it('shows mesos in a text box with their thousands apart, and reads them back', () => {
+    const { settings, type, val } = bound('<input type="text" id="p" data-setting="minProfit"><input type="number" id="q" data-setting="minProfit">');
+    expect(val('#p')).toBe('3,000');
+    expect(val('#q')).toBe('3000');
+    type('#p', '12,500');
+    expect(settings.minProfit).toBe(12500);
+    expect([val('#p'), val('#q')]).toEqual(['12,500', '12500']);
+    expect(inputValue(settingOf('fee'), 2.5, true).value).toBe('2.5');
+  });
+
+  it('will not bind a control to a setting that does not exist, nor a button to one that is not on or off', () => {
     expect(() => bound('<input data-setting="nope">')).toThrow('no setting called nope');
+    expect(() => bound('<button data-setting="fee"></button>')).toThrow('fee is not on or off');
   });
 });
 

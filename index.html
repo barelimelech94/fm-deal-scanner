@@ -34,11 +34,19 @@
 
 <main>
   <section class="view two" id="view-deals" role="tabpanel" aria-labelledby="tab-deals" tabindex="-1">
+    <section class="panel setup" id="dealsSetup" aria-labelledby="hDealsSetup" hidden>
+      <h2 id="hDealsSetup">Get started</h2>
+      <div id="dealsSteps"></div>
+    </section>
+
     <section class="panel lead" aria-labelledby="hShop">
       <div class="panel-head">
         <h2 id="hShop">Open shop</h2>
         <span class="headtools"><button class="btn small" id="shopSortReset" hidden title="Order by deals first again">Best first</button><span class="meta" id="shopMeta">No shop open</span></span>
       </div>
+      <p class="rules">Flag listings <input class="inline" type="text" inputmode="numeric" data-setting="discount" aria-label="Discount needed, in %">% under usual that make
+        <input class="inline wide" type="text" inputmode="numeric" data-setting="minProfit" aria-label="Minimum profit, in mesos"> mesos after a
+        <input class="inline" type="text" inputmode="decimal" data-setting="fee" aria-label="Sales fee, in %">% fee.</p>
       <div class="banner" id="dealBanner" hidden>
         <span class="label" id="dealLabel">Deal</span>
         <span class="what" id="dealWhat"></span>
@@ -60,18 +68,22 @@
             <tbody></tbody>
           </table>
         </div>
-        <p class="empty" id="shopEmpty">Open a player shop or hired merchant in the game. Its items show up here within a second.</p>
+        <p class="empty" id="shopEmpty">Open a player shop or hired merchant in the game.</p>
+        <p class="note" id="shopHelp" hidden>Not finding the shop? <button class="linkbtn" id="btnMarkShopHere">Mark its area</button></p>
       </div>
     </section>
 
     <section class="panel quiet" aria-labelledby="hDeals">
       <div class="panel-head">
-        <h2 id="hDeals">Deals this session</h2>
-        <button class="btn small" id="btnClearDeals">Clear</button>
+        <h2 id="hDeals">Deals found</h2>
+        <span class="headtools">
+          <button class="btn small bell" id="btnBell" data-setting="sound" aria-label="Chime on a deal" title="Chime on a deal"></button>
+          <button class="btn small" id="btnClearDeals">Clear</button>
+        </span>
       </div>
       <div class="panel-body">
         <div class="dealscroll"><ul class="deals" id="dealList"></ul></div>
-        <p class="empty" id="dealsEmpty">Nothing yet. Deals land here with the time you saw them.</p>
+        <p class="empty" id="dealsEmpty">No deals yet.</p>
       </div>
     </section>
   </section>

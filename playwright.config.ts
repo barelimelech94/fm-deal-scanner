@@ -13,7 +13,14 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}/fm-deal-scanner/`,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 900 } } }],
+  projects: [{
+    name: 'chromium',
+    use: {
+      ...devices['Desktop Chrome'], viewport: { width: 1400, height: 900 },
+      // Start capture shares a stand-in screen, with no picker
+      launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--auto-select-desktop-capture-source=Entire screen'] },
+    },
+  }],
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/fm-deal-scanner/`,

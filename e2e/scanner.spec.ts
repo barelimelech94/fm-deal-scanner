@@ -527,6 +527,100 @@ test('keeps a setting within its limits as it is typed, and in step wherever it 
   expect(errors).toEqual([]);
 });
 
+test('shows the Get started steps to someone new, ticks them off, and never again once done', async ({ page }) => {
+  const { errors } = await open(page);
+  const card = page.locator('#dealsSetup'), steps = card.locator('li');
+  await expect(card).toBeVisible();
+  await expect(steps.locator('.what')).toHaveText(['Load market prices', 'Start capture', 'Open a shop']);
+  await expect(steps.getByRole('button')).toHaveText(['Go to Prices', 'Start capture']);
+  await expect(page.locator('#dealsSetup li.done')).toHaveCount(0);
+
+  // the first step's button opens Prices; with prices loaded, it is ticked
+  await card.getByRole('button', { name: 'Go to Prices' }).click();
+  await expect(page.locator('#view-prices')).toBeVisible();
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await view(page, 'deals');
+  await expect(steps.nth(0)).toHaveClass(/done/);
+  await expect(steps.nth(0)).toContainText('(done)');
+  await expect(steps.nth(0).getByRole('button')).toHaveCount(0);
+  await expect(page.locator('#dealsSetup li.done')).toHaveCount(1);
+
+  // a shop read: the last two are done too, and the card goes, also after a reload
+  await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
+  await expect(card).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#shopMeta')).toHaveText('No shop open');
+  await expect(card).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+// Capture shares Chromium's stand-in screen (see playwright.config.ts): it starts with no picker, and never shows a shop.
+test('starts capture from Get started, and offers to mark the shop area when none is found for a while', async ({ page }) => {
+  const { errors } = await open(page);
+  const steps = page.locator('#dealsSetup li'), help = page.locator('#shopHelp');
+  await steps.nth(1).getByRole('button', { name: 'Start capture' }).click();
+  await expect(page.locator('#statusText')).toContainText('Watching for shops');
+  await expect(steps.nth(1)).toHaveClass(/done/);
+  await expect(page.locator('#dealsSetup')).toBeVisible();
+  await expect(help).toBeHidden();
+
+  // 15 seconds with no shop: one line offers to mark its area, which opens the marking dialog
+  await expect(help).toHaveText('Not finding the shop? Mark its area', { timeout: 40_000 });
+  await help.getByRole('button', { name: 'Mark its area' }).click();
+  await expect(page.locator('#calib')).toBeVisible();
+  await expect(page.locator('#hCalib')).toHaveText("Mark the shop's item list");
+  await page.click('#calibCancel');
+
+  // not looking any more: it goes
+  await page.click('#btnStop');
+  await expect(help).toBeHidden();
+  await expect(steps.nth(1)).not.toHaveClass(/done/);
+  expect(errors).toEqual([]);
+});
+
+test('the deal rules in the Open shop sentence and the bell are the settings in Settings → Deals', async ({ page }) => {
+  const { errors } = await open(page);
+  const rule = (key: string) => page.locator(`.rules [data-setting="${key}"]`);
+  await expect(page.locator('.rules')).toHaveText(/Flag listings\s+% under usual that make\s+mesos after a\s+% fee\./);
+  await expect(rule('discount')).toHaveValue('25');
+  await expect(rule('minProfit')).toHaveValue('3,000');
+  await expect(rule('fee')).toHaveValue('3');
+
+  // changed in the sentence, it shows in Settings, within its limits
+  await rule('discount').fill('40');
+  await rule('discount').press('Tab');
+  await rule('minProfit').fill('12500');
+  await rule('minProfit').press('Tab');
+  await expect(rule('minProfit')).toHaveValue('12,500');
+  await rule('fee').fill('99');
+  await rule('fee').press('Tab');
+  await expect(rule('fee')).toHaveValue('20');
+  await view(page, 'settings');
+  await expect(page.locator('#set-discount')).toHaveValue('40');
+  await expect(page.locator('#set-minProfit')).toHaveValue('12500');
+  await expect(page.locator('#set-fee')).toHaveValue('20');
+
+  // and the other way round
+  await page.fill('#set-discount', '30');
+  await page.press('#set-discount', 'Tab');
+  await view(page, 'deals');
+  await expect(rule('discount')).toHaveValue('30');
+
+  // the bell turns the chime off and on, as the switch in Settings does
+  const bell = page.getByRole('button', { name: 'Chime on a deal' });
+  await expect(bell).toHaveAttribute('aria-pressed', 'true');
+  await bell.click();
+  await expect(bell).toHaveAttribute('aria-pressed', 'false');
+  await view(page, 'settings');
+  await expect(page.locator('#set-sound')).not.toBeChecked();
+  await page.check('#set-sound');
+  await view(page, 'deals');
+  await expect(bell).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 30, minProfit: 12500, fee: 20, sound: true });
+  expect(errors).toEqual([]);
+});
+
 /** How many changes the page's views take while `act` runs: nodes and text written, not attributes. */
 async function rewrites(page: Page, act: () => Promise<unknown>): Promise<string[]> {
   await page.evaluate(() => {

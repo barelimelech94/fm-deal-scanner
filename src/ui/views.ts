@@ -128,10 +128,11 @@ export function hoverText(h: Hover | null, e: Engine): string {
 /** The newest deal, while it is fresh enough to show in the banner. */
 export const freshDeal = (s: ShopSession, now: number): Deal | null => (s.lastDeal && now - s.lastDeal.ts < 5 * 60e3 ? s.lastDeal : null);
 
+/** The open shop in a few words: "6 listings, 1 deal". */
 export function shopMeta(s: ShopSession, rows: readonly DisplayRow[]): string {
   if (!s.open) return 'No shop open';
   const total = s.listingCount(), deals = rows.filter((r) => r.verdict === 'deal').length;
-  return `${total} listing${total === 1 ? '' : 's'}${deals ? `, ${deals} deal${deals === 1 ? '' : 's'}` : ''}, opened ${clock(s.since)}`;
+  return `${total} listing${total === 1 ? '' : 's'}${deals ? `, ${deals} deal${deals === 1 ? '' : 's'}` : ''}`;
 }
 
 export function dealsHtml(deals: readonly Deal[], market: MarketIndex, failed?: ReadonlySet<string>): string {
