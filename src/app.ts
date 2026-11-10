@@ -73,7 +73,8 @@ export class App {
     this.scanner = new Scanner(canvasAdapter, this.reader, this.session, e, { onBook: () => this.saveBook() });
     this.inventory = new InventoryView({
       engine: e, store: this.store, failed, region: () => this.itemsRegion, setScanning: (on) => this.setScanning(on),
-      shown: shown('inventory'), version: () => String(this.data),
+      shown: shown('inventory'), version: () => String(this.data), capturing: () => this.capture.active,
+      openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), overlay: () => this.renderOverlay(),
     });
     this.controller = new ScanController({
       engine: e, capture: this.capture, reader: this.reader, repeat: (tick) => new Ticker(tick),
@@ -177,7 +178,7 @@ export class App {
   private changed(c: ScanChange): void {
     if (c.kind === 'shop') { this.deals.render(); this.prices.render(); }
     else if (c.kind === 'hover') this.hoverChanged(c.event);
-    else if (c.kind === 'status') { this.bar.render(); this.deals.render(); if (this.shell.isShown('settings')) this.settingsView.render(); }
+    else if (c.kind === 'status') { this.bar.render(); this.deals.render(); this.inventory.render(); if (this.shell.isShown('settings')) this.settingsView.render(); }
     else {
       document.body.dataset.scans = String(this.controller.scans);
       this.deals.render();   // it counts how long capture has looked for a shop

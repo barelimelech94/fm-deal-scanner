@@ -162,73 +162,134 @@ test('keeps your data from the single-file scanner', async ({ page }) => {
   await expect(page.locator('#bookTable tbody tr', { hasText: 'Lemona' })).toHaveCount(1);
 });
 
-test('appraises a pile of items typed in, and keeps it', async ({ page }) => {
+test('values a pile of items typed in, offers it all at once, and keeps it', async ({ page }) => {
   const { errors } = await open(page);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
   await expect(page.locator('#marketMsg')).toContainText('7 market prices for Windia now');
   await view(page, 'inventory');
-  await expect(page.locator('#apMeta')).toHaveText('Nothing added yet');
+  await expect(page.locator('#apMeta')).toHaveText('No items yet');
   await expect(page.locator('#apEmpty')).toBeVisible();
 
+  await page.click('#apAddOpen');
+  await expect(page.locator('#apAdd')).toBeFocused();
   await page.fill('#apAdd', 'Cape INT Scroll: Lesser x3\nShoes Speed Scroll: Chaos x5\nLemona\nWolbi Throwing Stars x2\nMystery Thing x4');
   await page.click('#apAddBtn');
   await expect(page.locator('#apBody tr')).toHaveCount(5);
   await expect(page.locator('#apMsg')).toHaveText('Added 5 items.');
+  // in the order they were added
+  expect((await page.locator('#apBody .nm-n').allTextContents()).map((n) => n.trim()))
+    .toEqual(['Cape INT Scroll: Lesser', 'Shoes Speed Scroll: Chaos', 'Lemona', 'Wolbi Throwing Stars', 'Mystery Thing']);
   // 3 × 65,000 + 5 × 21,000 + 21,000 + 2 sets × 2,499; the unknown item has no price
   await expect(page.locator('#apTotal')).toHaveText('325,998');
-  await expect(page.locator('#apMeta')).toHaveText('5 kinds, 15 items');
-  await expect(page.locator('#apWarn')).toContainText('1 item has no price');
-  await expect(page.locator('#apQuote')).toHaveText('5 kinds / 15 items = 325,998 mesos (1 not priced)');
+  await expect(page.locator('#apStore')).toHaveText('325,998');
+  await expect(page.locator('#apMeta')).toHaveText('5 items');
+  await expect(page.locator('#apNoPrice')).toHaveText('1 has no price');
+  await expect(page.locator('#apLeft')).toHaveText('1 item not counted: no price');
   await expect(page.locator('#apBody tr', { hasText: 'Wolbi' })).toContainText('priced per set');
 
-  // type a price for the unknown item: it counts, and the warning goes
+  // type a price for the unknown item in its List at box: it counts, and the warning goes
   const mystery = page.locator('#apBody tr', { hasText: 'Mystery Thing' });
   await mystery.locator('input[data-field="price"]').fill('1k');
   await mystery.locator('input[data-field="price"]').press('Tab');
   await expect(page.locator('#apTotal')).toHaveText('329,998');
-  await expect(page.locator('#apWarn')).toBeHidden();
+  await expect(page.locator('#apLeft')).toHaveText('');
+  await expect(page.locator('#apNoPrice')).toBeHidden();
   await expect(page.locator('#apBody tr', { hasText: 'Mystery Thing' }).locator('.chip')).toHaveText('Priced');
 
-  // offer 90% of everything
+  // offer 90% of everything, from the closed Sell everything at once card
+  await expect(page.locator('#apBulk')).toBeHidden();
+  await page.click('#apSell summary');
   await page.fill('#apBulk', '90');
   await page.press('#apBulk', 'Tab');
-  await expect(page.locator('#apOffer')).toHaveText('296,998');
-  await expect(page.locator('#apOfferLabel')).toHaveText('Offer at 90%');
-  await expect(page.locator('#apQuote')).toHaveText('5 kinds / 15 items = 296,998 mesos');
+  await expect(page.locator('#apOffer')).toHaveText("You'd ask 296,998");
+  await expect(page.locator('#apQuote')).toHaveText('15 items for 296,998 mesos');
   await page.click('#apCopy');
-  await expect(page.locator('#apMsg')).toHaveText('Copied.');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('5 kinds / 15 items = 296,998 mesos');
+  await expect(page.locator('#apMsg')).toHaveText('Copied the offer.');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('15 items for 296,998 mesos');
 
-  // a skipped line is left out of the total; greedy reads the same without sightings
+  // a skipped line is left out of the worth; Asking reads the same without sightings
   await page.locator('#apBody tr', { hasText: 'Lemona' }).locator('button[data-act="skip"]').click();
   await expect(page.locator('#apTotal')).toHaveText('308,998');
-  await expect(page.locator('#apMeta')).toHaveText('4 kinds, 14 items, 1 skipped');
-  await page.selectOption('#apMode', 'greedy');
-  await expect(page.locator('#apModeNote')).toContainText('Greedy');
+  await expect(page.locator('#apMeta')).toHaveText('4 items');
+  await expect(page.locator('#apLeft')).toHaveText('1 skipped');
+  await page.click('.seg label:has-text("Asking")');
+  await expect(page.locator('input[name="apMode"][value="greedy"]')).toBeChecked();
   await expect(page.locator('#apTotal')).toHaveText('308,998');
 
   // all of it is still there after a reload
   await page.reload();
   await expect(page.locator('#apBody tr')).toHaveCount(5);
   await expect(page.locator('#apTotal')).toHaveText('308,998');
-  await expect(page.locator('#apMode')).toHaveValue('greedy');
+  await expect(page.locator('input[name="apMode"][value="greedy"]')).toBeChecked();
   await expect(page.locator('#apBulk')).toHaveValue('90');
   await expect(page.locator('#apBody tr', { hasText: 'Lemona' }).locator('.chip')).toHaveText('Skipped');
+  await view(page, 'settings');
+  await expect(page.locator('#set-appraisalMode')).toHaveValue('greedy');
+  await view(page, 'inventory');
 
-  // remove one line, then clear the rest (a second click confirms)
+  // remove one line, then clear the rest: the button asks first, a second click clears
   await page.locator('#apBody tr', { hasText: 'Mystery Thing' }).locator('button[data-act="del"]').click();
   await expect(page.locator('#apBody tr')).toHaveCount(4);
   await page.click('#apClear');
+  await expect(page.locator('#apClear')).toHaveText('Click again to clear');
   await expect(page.locator('#apBody tr')).toHaveCount(4);
   await page.click('#apClear');
   await expect(page.locator('#apBody tr')).toHaveCount(0);
-  await expect(page.locator('#apMeta')).toHaveText('Nothing added yet');
+  await expect(page.locator('#apClear')).toHaveText('Clear');
+  await expect(page.locator('#apMeta')).toHaveText('No items yet');
   await expect(page.locator('#apEmpty')).toBeVisible();
+  // nothing a player reads calls it an appraisal, or counts kinds
+  expect(await page.locator('#view-inventory').innerText()).not.toMatch(/apprais|kinds/i);
   expect(errors).toEqual([]);
 });
 
-test('adds the items you hover to the appraisal, and only while scanning', async ({ page }) => {
+test('asks for the counts of stacks: only those shown, Enter moving to the next', async ({ page }) => {
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await view(page, 'inventory');
+  await page.click('#apAddOpen');
+  await page.fill('#apAdd', 'Red Potion\nCape INT Scroll: Lesser\nShoes Speed Scroll: Chaos x5\nLemona\nWolbi Throwing Stars');
+  await page.click('#apAddBtn');
+  const rows = page.locator('#apBody tr'), qty = (name: string) => rows.filter({ hasText: name }).locator('input[data-field="qty"]');
+  await expect(rows).toHaveCount(5);
+  // Lemona is an equip and the scrolls ×5 have their count: three stacks are still at 1
+  await expect(page.locator('#apNeedCount')).toHaveText('3 need a count');
+  await expect(rows.locator('.cellinput.need')).toHaveCount(3);
+  await page.click('#apNeedCount');
+  await expect(page.locator('#apNeedCount')).toHaveAttribute('aria-pressed', 'true');
+  await expect(rows).toHaveCount(3);
+  expect((await rows.locator('.nm-n').allTextContents()).map((n) => n.trim())).toEqual(['Red Potion', 'Cape INT Scroll: Lesser', 'Wolbi Throwing Stars']);
+
+  // type a count and press Enter: the line has its count, and the next box is ready to type in
+  await qty('Red Potion').fill('12');
+  await qty('Red Potion').press('Enter');
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator('#apNeedCount')).toHaveText('2 need a count');
+  await expect(qty('Cape INT Scroll: Lesser')).toBeFocused();
+  await page.keyboard.type('3');
+  await page.keyboard.press('Enter');
+  await expect(qty('Wolbi Throwing Stars')).toBeFocused();
+  // a count of 1 typed is a count too
+  await page.keyboard.type('1');
+  await page.keyboard.press('Enter');
+  // none left: every item shows again
+  await expect(rows).toHaveCount(5);
+  await expect(page.locator('#apNeedWrap')).toBeHidden();
+  await expect(rows.locator('.cellinput.need')).toHaveCount(0);
+  await expect(page.locator('#apTotal')).toHaveText(String((3 * 65000 + 5 * 21000 + 21000 + 2499).toLocaleString('en-US')));
+
+  // without the filter, Enter moves along all the lines, and the counts are kept
+  await qty('Red Potion').fill('20');
+  await qty('Red Potion').press('Enter');
+  await expect(qty('Cape INT Scroll: Lesser')).toBeFocused();
+  await page.reload();
+  await expect(qty('Red Potion')).toHaveValue('20');
+  await expect(page.locator('#apNeedWrap')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('adds the items you hover to your inventory, and only while scanning', async ({ page }) => {
   test.setTimeout(240_000);
   const { errors } = await open(page);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(HOVER_TRACKER) });
@@ -240,15 +301,17 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   // nothing to scan yet: scanning can't start
   await page.click('#apScan');
   await expect(page.locator('#apHint')).toContainText('Start the screen capture first');
-  await expect(page.locator('#apState')).toHaveText('Paused');
+  await expect(page.locator('#apScan')).toHaveText('Scan my items');
+  await expect(page.locator('#apScan')).toHaveAttribute('aria-pressed', 'false');
 
   // a screenshot to scan, then start: the scroll under the mouse is added, with its count flagged for typing
   await loadShot(page, screen('use-scroll-inventory'));
   await page.click('#apScan');
-  await expect(page.locator('#apState')).toHaveText('Scanning: point at your items');
+  await expect(page.locator('#apScan')).toHaveText('Pause');
+  await expect(page.locator('#apScan')).toHaveAttribute('aria-pressed', 'true');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('Overall Armor LUK Scroll: Greater');
-  await expect(rows.first().locator('.cellinput.unsure')).toHaveCount(1);
+  await expect(rows.first().locator('.cellinput.need')).toHaveCount(1);
   await expect(page.locator('#apHint')).toContainText('type how many you have');
   await expect(page.locator('#statusText')).toContainText('Scanning your items');
 
@@ -256,7 +319,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await loadShot(page, screen('trade-equip'));
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1)).toContainText('Lemona');
-  await expect(rows.nth(1).locator('.cellinput.unsure')).toHaveCount(0);
+  await expect(rows.nth(1).locator('.cellinput.need')).toHaveCount(0);
   await expect(page.locator('#apTotal')).toHaveText('29,499');   // 27,499 + 2,000
 
   // a hover that is a repeat adds nothing
@@ -266,7 +329,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   // type the count of the scroll: no longer in doubt
   await rows.first().locator('input[data-field="qty"]').fill('3');
   await rows.first().locator('input[data-field="qty"]').press('Tab');
-  await expect(rows.first().locator('.cellinput.unsure')).toHaveCount(0);
+  await expect(rows.first().locator('.cellinput.need')).toHaveCount(0);
   await expect(page.locator('#apTotal')).toHaveText('84,497');   // 3 × 27,499 + 2,000
 
   // a potion, then take it back
@@ -279,7 +342,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
 
   // paused: hovering adds nothing
   await page.click('#apScan');
-  await expect(page.locator('#apState')).toHaveText('Paused');
+  await expect(page.locator('#apScan')).toHaveText('Scan my items');
   await loadShot(page, screen('equip-not-worn'));
   await expect(rows).toHaveCount(2);
 
@@ -298,7 +361,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await expect(page.locator('#set-appraisalArea')).toHaveValue('marked');
   await view(page, 'inventory');
   await page.click('#apScan');
-  await expect(page.locator('#apState')).toHaveText('Scanning: point at your items');
+  await expect(page.locator('#apScan')).toHaveText('Pause');
   await expect(rows).toHaveCount(2);   // the screenshot on screen has its tooltip far from the box
   await loadShot(page, screen('equip-not-worn'));
   await expect(rows).toHaveCount(2);
@@ -312,9 +375,61 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   // stopping the capture is not needed to pause; the area and the lines are kept across a reload
   await page.reload();
   await expect(rows).toHaveCount(3);
-  await expect(page.locator('#apState')).toHaveText('Paused');
+  await expect(page.locator('#apScan')).toHaveText('Scan my items');
   await view(page, 'settings');
   await expect(page.locator('#set-appraisalArea')).toHaveValue('any');
+  expect(errors).toEqual([]);
+});
+
+test('sets up your store: the item hovered last stands out with its List at price, and the prices follow List at', async ({ page }) => {
+  test.setTimeout(180_000);
+  const { errors } = await open(page);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(HOVER_TRACKER) });
+  const screen = (name: string) => screenFile(`${name}.png`, placeOn(loadPng(`appraisal/${name}.png`), 1440, 900, 100, 100));
+  const rows = page.locator('#apBody tr'), listAt = (n: number) => rows.nth(n).locator('input[data-field="price"]');
+  await view(page, 'inventory');
+
+  // hover an equip: it is added, highlighted, with what to list it at
+  await loadShot(page, screen('trade-equip'));
+  await page.click('#apScan');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Lemona');
+  await expect(rows.first()).toHaveClass(/\blast\b/);
+  await expect(listAt(0)).toHaveValue('2,000');
+  await expect(page.locator('#apStore')).toHaveText('2,000');
+  // a scroll next: the highlight moves to it
+  await loadShot(page, screen('use-scroll-inventory'));
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toHaveClass(/\blast\b/);
+  await expect(rows.first()).not.toHaveClass(/\blast\b/);
+  await expect(page.locator('#apBody tr.last')).toHaveCount(1);
+  await expect(page.locator('#apTotal')).toHaveText('29,499');
+
+  // List at 10% over: each List at price and In your store follow; the worth stays
+  await page.fill('#apAdjust', '+10');
+  await page.press('#apAdjust', 'Tab');
+  await expect(page.locator('#apAdjust')).toHaveValue('10');
+  await expect(listAt(0)).toHaveValue('2,200');
+  await expect(listAt(1)).toHaveValue('30,249');   // 27,499 × 1.1
+  await expect(page.locator('#apStore')).toHaveText('32,449');
+  await expect(page.locator('#apTotal')).toHaveText('29,499');
+  await view(page, 'settings');
+  await expect(page.locator('#set-storeAdjust')).toHaveValue('10');
+  await view(page, 'inventory');
+
+  // a price typed in List at is that item's own price, as typed
+  await listAt(0).fill('2,500');
+  await listAt(0).press('Tab');
+  await expect(listAt(0)).toHaveValue('2,500');
+  await expect(rows.first()).toContainText('typed here');
+  await expect(page.locator('#apStore')).toHaveText('32,749');
+  await expect(page.locator('#apTotal')).toHaveText('29,999');
+
+  // the store prices, copied, in the order the items were added
+  await page.click('#apCopyStore');
+  await expect(page.locator('#apMsg')).toHaveText('Copied the store prices.');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Lemona ×1: 2,500\nOverall Armor LUK Scroll: Greater ×1: 30,249');
   expect(errors).toEqual([]);
 });
 
@@ -364,63 +479,7 @@ test('orders the open shop by a column, most profit first, and remembers it', as
   expect(errors).toEqual([]);
 });
 
-test('orders the appraisal by a column, most valuable first, and remembers it', async ({ page }) => {
-  const { errors } = await open(page);
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
-  await view(page, 'inventory');
-  await page.fill('#apAdd', 'Lemona\nWolbi Throwing Stars x2\nCape INT Scroll: Lesser x3\nMystery Thing x4\nShoes Speed Scroll: Chaos x5');
-  await page.click('#apAddBtn');
-  const names = async () => (await page.locator('#apBody .nm-n').allTextContents()).map((n) => n.trim());
-  const added = ['Lemona', 'Wolbi Throwing Stars', 'Cape INT Scroll: Lesser', 'Mystery Thing', 'Shoes Speed Scroll: Chaos'];
-  expect(await names()).toEqual(added);
-  await expect(page.locator('#apSortReset')).toBeHidden();
-  await expect(page.locator('#apOrder')).toHaveValue('added');
-
-  // Total: the most valuable first; the line with no price goes last
-  await page.click('#apTable th[data-col="total"]');
-  expect(await names()).toEqual(['Cape INT Scroll: Lesser', 'Shoes Speed Scroll: Chaos', 'Lemona', 'Wolbi Throwing Stars', 'Mystery Thing']);
-  await expect(page.locator('#apTable th[data-col="total"]')).toHaveAttribute('aria-sort', 'descending');
-  await expect(page.locator('#apOrder')).toHaveValue('total:-1');
-  await expect(page.locator('#apSortReset')).toBeVisible();
-  // the total does not change, and the copied list follows the order
-  await expect(page.locator('#apTotal')).toHaveText('325,998');
-  await page.click('#apCopyFull');
-  const full = (await page.evaluate(() => navigator.clipboard.readText())).split('\n');
-  expect(full.slice(1, 3)).toEqual(['Cape INT Scroll: Lesser ×3 = 195,000', 'Shoes Speed Scroll: Chaos ×5 = 105,000']);
-
-  // again flips it; a column of text starts A to Z
-  await page.click('#apTable th[data-col="total"]');
-  expect((await names()).slice(0, 2)).toEqual(['Wolbi Throwing Stars', 'Lemona']);
-  await expect(page.locator('#apOrder')).toHaveValue('custom');
-  await page.keyboard.press('Tab');
-  await page.focus('#apTable th[data-col="name"]');
-  await page.keyboard.press('Enter');
-  expect(await names()).toEqual(['Cape INT Scroll: Lesser', 'Lemona', 'Mystery Thing', 'Shoes Speed Scroll: Chaos', 'Wolbi Throwing Stars']);
-  await expect(page.locator('#apTable th[data-col="total"]')).toHaveAttribute('aria-sort', 'none');
-
-  // the Order list does the same
-  await page.selectOption('#apOrder', 'qty:-1');
-  expect((await names()).slice(0, 3)).toEqual(['Shoes Speed Scroll: Chaos', 'Mystery Thing', 'Cape INT Scroll: Lesser']);
-  await expect(page.locator('#apTable th[data-col="qty"]')).toHaveAttribute('aria-sort', 'descending');
-
-  // a line added now lands where the order says, and the choice survives a reload
-  await page.fill('#apAdd', 'Traus x9');
-  await page.click('#apAddBtn');
-  expect((await names())[0]).toBe('Traus');
-  await page.reload();
-  await expect(page.locator('#apOrder')).toHaveValue('qty:-1');
-  await expect(page.locator('#apSortReset')).toBeVisible();
-  expect((await names())[0]).toBe('Traus');
-
-  // back to the order they were added in
-  await page.click('#apSortReset');
-  await expect(page.locator('#apSortReset')).toBeHidden();
-  expect(await names()).toEqual([...added, 'Traus']);
-  expect(errors).toEqual([]);
-});
-
-test('uses what an NPC pays: a deal in the shop, a floor in the appraisal, and off when set to 0', async ({ page }) => {
+test('uses what an NPC pays: a deal in the shop, a floor in your inventory, and off when set to 0', async ({ page }) => {
   const { errors } = await open(page);
   // Lemona: the market says 21,000, an NPC shop sells it at 50,000 so an NPC pays 25,000 for it
   const withNpc = trackerPage([
@@ -461,6 +520,7 @@ test('uses what an NPC pays: a deal in the shop, a floor in the appraisal, and o
   await page.fill('#set-npcRatio', '50');
   await page.press('#set-npcRatio', 'Tab');
   await view(page, 'inventory');
+  await page.click('#apAddOpen');
   await page.fill('#apAdd', 'Lemona x2\nCape INT Scroll: Lesser');
   await page.click('#apAddBtn');
   await expect(page.locator('#apTotal')).toHaveText('115,000');   // 2 × 25,000 + 65,000
@@ -545,8 +605,8 @@ test('keeps a setting within its limits as it is typed, and in step wherever it 
   await page.fill('#set-bulkOffer', '80');
   await page.press('#set-bulkOffer', 'Tab');
   await view(page, 'inventory');
+  await page.click('#apSell summary');
   await expect(page.locator('#apBulk')).toHaveValue('80');
-  await expect(page.locator('#apOfferLabel')).toHaveText('Offer at 80%');
   await page.fill('#apBulk', '1000');
   await page.press('#apBulk', 'Tab');
   await expect(page.locator('#apBulk')).toHaveValue('300');
