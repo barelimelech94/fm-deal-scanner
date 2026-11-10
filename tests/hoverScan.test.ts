@@ -134,6 +134,24 @@ describe('HoverCollector', () => {
     expect(hasStats({ ...tip('Lemona'), remaining: 5 })).toBe(true);
   });
 
+  it('knows an equip from a stack by its id, whatever its tooltip shows', () => {
+    const { data, c } = make();
+    c.ingest(tip('Lemona'), at(100), 5);              // an equip whose stat lines were not read
+    c.ingest(tip('Red Potion', true), at(400), 84);   // a stack with a line misread as a stat
+    expect(data.entries.map((x) => ({ name: x.name, qty: x.qty, tip: !!x.tip }))).toEqual([
+      { name: 'Lemona', qty: 1, tip: true }, { name: 'Red Potion', qty: 84, tip: false },
+    ]);
+  });
+
+  it('goes by the tooltip for an item whose id is not known', () => {
+    const { data, c } = make();
+    c.ingest(tip('Zzyzx Hat', true), at(100), 5);
+    c.ingest(tip('Zzyzx Stone'), at(400), 12);
+    expect(data.entries.map((x) => ({ name: x.name, qty: x.qty, tip: !!x.tip }))).toEqual([
+      { name: 'Zzyzx Hat', qty: 1, tip: true }, { name: 'Zzyzx Stone', qty: 12, tip: false },
+    ]);
+  });
+
   it('adds one line per item, and one more of it for each other slot', () => {
     const { data, c } = make();
     c.ingest(tip('Lemona', true), at(100));

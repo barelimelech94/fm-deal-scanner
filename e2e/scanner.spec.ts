@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
 import { loadPng, placeOn, scaleBy } from '../tests/helpers/image';
 import type { Pixels } from '../src/vision/pixels';
-import { HOVER_ITEMS } from '../tests/helpers/hover';
+import { HOVER_ITEMS, hoverId } from '../tests/helpers/hover';
 
 /** A screen-sized PNG with a fixture drawn on it, as a file for the screenshot picker. */
 function screenFile(name: string, frame: Pixels) {
@@ -41,7 +41,7 @@ const TRACKER = trackerPage([
 ]);
 
 /** The items on the hover screenshots, as the tracker had them on Nov 7 2026. */
-const HOVER_TRACKER = trackerPage(HOVER_ITEMS.map((it, i): TrackerRow => [`0${1000000 + i}`, it.n, it.c, it.p ?? 0, it.s, '📦']));
+const HOVER_TRACKER = trackerPage(HOVER_ITEMS.map((it): TrackerRow => [`0${hoverId(it)}`, it.n, it.c, it.p ?? 0, it.s, '📦']));
 
 /** The item names the build fetches from maplestory.io, a few of them, so the tests don't depend on it. */
 const CATALOG = { source: 'test', fetched: '2026-11-04T00:00:00Z', items: [[1082003, 'Lemona'], [1302012, 'Traus']] };
