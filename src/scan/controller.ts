@@ -198,6 +198,7 @@ export class ScanController<F, I> {
       return false;
     }
     this.still = null;
+    this.failures = 0;   // the status line says what it reads again at the end of the check
     this.d.shop.reset();
     this.statusChanged();
     if (!(await this.loadReader())) return false;
@@ -214,6 +215,7 @@ export class ScanController<F, I> {
 
   stopCapture(): void {
     this.generation++;
+    this.failures = 0;   // the status line says what it reads again at the end of the check
     this.setScanning(false);
     this.ticker.stop();
     this.d.capture.stop();
@@ -297,7 +299,7 @@ export class ScanController<F, I> {
     const keep = () => this.generation === generation;
     if (list) { try { await shop.read(list, keep); } catch (e) { console.error(e); } }
     if (tip) { try { event = await hovers.read(tip, keep); } catch (e) { console.error(e); } }
-    if (!keep()) return;
+    if (!keep()) { this.statusChanged(); return; }   // `failures` was just reset: the status line may say so
     this.scans++;
     if (session.version !== shopV) this.emit({ kind: 'shop' });
     if (collector.version !== hoverV || event) this.emit({ kind: 'hover', event });

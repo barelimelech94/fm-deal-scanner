@@ -395,6 +395,45 @@ describe('ScanController', () => {
       expect(changes).toContain('status');
     });
 
+    it("does not say it can't read the screen again at once when capture is stopped and started", async () => {
+      const { c, shop, capture } = setup();
+      await c.startCapture();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failing = vi.spyOn(shop, 'prepare').mockImplementation(() => { throw new Error('no 2d canvas'); });
+      for (let i = 0; i < 3; i++) await c.tick(true);
+      expect(c.status().html).toContain("Can't read the screen");
+      c.stopCapture();
+      await c.startCapture();   // as the message says; its first check fails too (the reader is still broken)
+      await c.tick(true);
+      expect(capture.active).toBe(true);
+      expect(c.status().html).not.toContain("Can't read the screen");   // two failures since the start
+      failing.mockRestore();
+      logged.mockRestore();
+    });
+
+    it('updates the status line when a check is dropped after the screen was read again', async () => {
+      const { c, shop, capture, changes } = setup();
+      await c.startCapture();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failing = vi.spyOn(shop, 'prepare').mockImplementation(() => { throw new Error('no 2d canvas'); });
+      for (let i = 0; i < 3; i++) await c.tick(true);
+      failing.mockRestore();
+      logged.mockRestore();
+      expect(c.status().html).toContain("Can't read the screen");
+      // a check is waiting for its frame when the mode changes, so it ends in another generation
+      let release = () => {};
+      const gate = new Promise<void>((r) => { release = r; });
+      const grab = capture.grab.bind(capture);
+      capture.grab = async () => { await gate; return grab(); };
+      const check = c.tick(true);
+      c.setMode('inventory');
+      changes.length = 0;
+      release();
+      await check;
+      expect(c.status().html).not.toContain("Can't read the screen");
+      expect(changes).toContain('status');
+    });
+
     it('counts every check', async () => {
       const { c } = setup();
       c.setMode('inventory');
