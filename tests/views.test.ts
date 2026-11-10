@@ -204,6 +204,10 @@ describe('the message after loading market prices', () => {
     expect(marketLoadText({ ...note, files: 2, total: 1200, changed: 1 })).toBe('Loaded 2 files: 1,200 market prices for Windia now, 1 of them added or updated.');
   });
 
+  it('says so when the load changed nothing', () => {
+    expect(marketLoadText({ ...note, changed: 0 })).toBe('Loaded 1 file: nothing new or changed, still 7 market prices for Windia.');
+  });
+
   it('says when the prices of another world were replaced, and names the files it skipped', () => {
     expect(marketLoadText({ ...note, replaced: 'Bera', skipped: ['notes.html'] }))
       .toBe('Loaded 1 file: 7 market prices for Windia now, 7 of them added or updated. These replaced the prices for Bera. Skipped notes.html: no price table in it.');

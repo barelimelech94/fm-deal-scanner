@@ -23,6 +23,7 @@ describe('Get started steps', () => {
     expect(li[1]!.querySelector('button')!.dataset.step).toBe('1');
     expect(li[2]!.querySelector('button')).toBeNull();
     expect(html).toContain('Open a &lt;shop&gt;');
+    expect(document.querySelector('ol')!.getAttribute('role')).toBe('list');
   });
 
   it('is done when every step is', () => {

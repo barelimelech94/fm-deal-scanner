@@ -243,7 +243,9 @@ export const NO_PRICE_TABLE = "That page has no price table. On meso.watch, wait
 export function marketLoadText(n: MarketLoadNote): string {
   const s = (k: number) => (k === 1 ? '' : 's');
   const world = n.world || 'your world';
-  return `Loaded ${n.files} file${s(n.files)}: ${fmt(n.total)} market price${s(n.total)} for ${world} now, ${fmt(n.changed)} of them added or updated.`
+  const prices = `${fmt(n.total)} market price${s(n.total)} for ${world}`;
+  return `Loaded ${n.files} file${s(n.files)}: `
+    + (n.changed ? `${prices} now, ${fmt(n.changed)} of them added or updated.` : `nothing new or changed, still ${prices}.`)
     + (n.replaced ? ` These replaced the prices for ${n.replaced}.` : '')
     + (n.npc ? ` ${fmt(n.npc)} have an NPC shop price.` : '')
     + (n.skipped.length ? ` Skipped ${n.skipped.join(', ')}: no price table in ${n.skipped.length === 1 ? 'it' : 'them'}.` : '')

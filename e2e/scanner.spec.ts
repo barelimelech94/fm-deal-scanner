@@ -676,6 +676,9 @@ test('adds market files up: several at once, and on top of those loaded before',
   // a third page later adds to them, and its price for an item already there wins
   await page.setInputFiles('#fileMarket', file('page3.html', [['01082003', 'Lemona', 'Equips', 19000, 52, '🧤'], ['02070006', 'Wolbi Throwing Stars', 'Stars', 2499, 7359, '⭐']]));
   await expect(page.locator('#marketMsg')).toHaveText('Loaded 1 file: 4 market prices for Windia now, 2 of them added or updated.');
+  // the same file again changes nothing, and says so
+  await page.setInputFiles('#fileMarket', file('page3.html', [['01082003', 'Lemona', 'Equips', 19000, 52, '🧤'], ['02070006', 'Wolbi Throwing Stars', 'Stars', 2499, 7359, '⭐']]));
+  await expect(page.locator('#marketMsg')).toHaveText('Loaded 1 file: nothing new or changed, still 4 market prices for Windia.');
   await page.fill('#bookSearch', 'lemona');
   await expect(page.locator('#bookTable tbody tr', { hasText: 'Lemona' })).toContainText('19,000');
   // kept for next time

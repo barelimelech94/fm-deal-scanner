@@ -20,7 +20,8 @@ export function setupStepsHtml(steps: readonly SetupStep[]): string {
     return `<li class="step${s.done ? ' done' : ''}"><span class="mark" aria-hidden="true">${s.done ? '✓' : ''}</span>`
       + `<span class="n" aria-hidden="true">${i + 1}</span><span class="what">${esc(s.label)}${s.done ? '<span class="sr"> (done)</span>' : ''}</span>${button}</li>`;
   });
-  return `<ol class="steps">${items.join('')}</ol>`;
+  // the list keeps its role, which some screen readers drop from a list styled without markers
+  return `<ol class="steps" role="list">${items.join('')}</ol>`;
 }
 
 /**

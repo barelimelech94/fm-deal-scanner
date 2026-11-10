@@ -87,6 +87,22 @@ describe('mergeMarketPages', () => {
     expect(r).toMatchObject({ changed: 1, replaced: 'Windia' });
   });
 
+  it('counts nothing changed when the same page is loaded again', () => {
+    const again = mergeMarketPages(kept, [kept]);
+    expect(again).toMatchObject({ changed: 0, replaced: null });
+    expect(mergeMarketPages(kept, [page('Windia', T0 + DAY, [item('basil:2', 'Lemona', 21000), item('basil:3', 'Axe Pole Arm', 15000)])]).changed).toBe(1);
+  });
+
+  it('names the world kept before once, and only when the prices now are for another', () => {
+    // Windia kept; a Bera page, then a newer Windia page: the prices are Windia's again
+    const back = mergeMarketPages(kept, [page('Bera', T0 + DAY, [item('basil:3', 'Axe Pole Arm', 15000)]), page('Windia', T0 + 2 * DAY, [item('basil:2', 'Lemona', 21000)])]);
+    expect(back.data.world).toBe('Windia');
+    expect(back.replaced).toBeNull();
+    // a Windia page, then a newer Bera one: Windia's prices were replaced, said once
+    const away = mergeMarketPages(kept, [page('Windia', T0 + DAY, [item('basil:2', 'Lemona', 19000)]), page('Bera', T0 + 2 * DAY, [item('basil:3', 'Axe Pole Arm', 15000)])]);
+    expect(away).toMatchObject({ replaced: 'Windia', changed: 1 });
+  });
+
   it('replaces nothing when there were no prices', () => {
     const none = page('', 0, []);
     expect(mergeMarketPages(none, [page('Bera', T0, [item('basil:3', 'Axe Pole Arm', 15000)])]).replaced).toBeNull();
