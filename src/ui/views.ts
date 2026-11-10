@@ -1,10 +1,10 @@
-// HTML for the page and the overlay, built from the shop state. Pure: everything comes in as
+// HTML for the page, built from the shop state. Pure: everything comes in as
 // arguments, so it is tested without a browser.
 import type { Engine } from '../engine';
 import { iconUrl } from '../icons';
-import { ago, cap, clock, DAY, esc, fmt, fmtEach, fmtShort, salesTxt, signed } from '../lib/format';
+import { ago, cap, clock, DAY, esc, fmt, fmtEach, salesTxt, signed } from '../lib/format';
 import { norm, parseAmount } from '../lib/text';
-import type { BookItem, MarketItem, ScanMode, ShopSortCol, UsualSource, Verdict } from '../lib/types';
+import type { BookItem, MarketItem, ShopSortCol, UsualSource, Verdict } from '../lib/types';
 import { isRough, marketTip, type MarketIndex } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
 import { sightingStats } from '../pricing/priceBook';
@@ -76,7 +76,7 @@ export function sortRows(rows: DisplayRow[], sort: ShopSort = BEST_FIRST): Displ
   });
 }
 
-const pctCell = (pct: number | null) => ({
+export const pctCell = (pct: number | null) => ({
   text: pct == null ? '–' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`,
   cls: pct == null ? 'dim' : pct < 0 ? 'pos' : pct > 0.15 ? 'neg' : '',
 });
@@ -107,16 +107,6 @@ export function shopRowHtml(r: DisplayRow, market: MarketIndex, failed?: Readonl
   </tr>`;
 }
 
-/** The overlay's row: price now, the usual price it's measured against, and how far apart they are. */
-export function overlayRowHtml(r: DisplayRow, market: MarketIndex, failed?: ReadonlySet<string>): string {
-  const pct = pctCell(r.pct);
-  const label = `${esc(r.name)}${r.truncated ? '…' : ''}`
-    + (r.unchecked ? ` <span class="cnt">${r.count} more, not hovered</span>` : r.count > 1 ? ` <span class="cnt">×${r.count}</span>` : '');
-  const chip = `<span class="chip ${r.verdict}"${r.why ? ` title="${esc(r.why)}"` : ''}>${r.verdict === 'new' ? 'No price' : VERDICT[r.verdict]}</span>`;
-  return `<tr class="v-${r.verdict}"><td class="name"><span class="nm">${iconHtml(market, r.key, failed)}<span class="nm-n" title="${esc(r.name)}">${label}</span></span></td>`
-    + `<td class="n">${fmtShort(r.unit)}</td><td class="n dim">${r.usual == null ? '–' : fmtShort(r.usual)}</td><td class="n ${pct.cls}">${pct.text}</td><td>${chip}</td></tr>`;
-}
-
 /** What the last hovered tooltip said, and what that makes the item worth. */
 export function hoverText(h: Hover | null, e: Engine): string {
   if (!h || e.now() - h.ts > 90e3) return '';
@@ -140,32 +130,6 @@ export function dealsHtml(deals: readonly Deal[], market: MarketIndex, failed?: 
     const l = dealLine(d, market);
     return `<li><span class="t">${clock(d.ts)}</span><span class="w"><span class="nm">${iconHtml(market, d.key, failed)}<span class="nm-t"><span class="nm-n">${esc(l.name)}</span><span class="sub">${esc(cap(l.listing))}, ${esc(l.why)}</span></span></span></span><span class="p">${esc(l.profit)}</span></li>`;
   }).join('');
-}
-
-export interface OverlayState {
-  mode: ScanMode; open: boolean; capturing: boolean; scanning: boolean; rows: DisplayRow[]; deal: Deal | null; hover: string; hoverKey: string | null;
-}
-
-/**
- * The overlay, named by the mode. Deals: the newest deal on top, then the best eight rows of the open shop.
- * Inventory: `inventory`, what the Inventory view gives it.
- */
-export function overlayHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySet<string>, inventory = ''): string {
-  const doing = !o.capturing ? 'Not capturing' : o.mode === 'inventory' ? (o.scanning ? 'Scanning' : 'Paused') : o.open ? 'Shop open' : 'Watching';
-  const head = `<div class="ph"><b>${o.mode === 'inventory' ? 'Inventory' : 'Deals'}</b><span>${doing}</span></div>`;
-  if (o.mode === 'inventory') return head + inventory;
-  const rows = o.rows.slice(0, 8);
-  const l = o.deal ? dealLine(o.deal, market) : null;
-  const hover = o.hover && o.hoverKey != null ? `<p class="hovered">${iconHtml(market, o.hoverKey, failed)}<span>${esc(o.hover)}</span></p>` : '';
-  const deal = l && o.deal
-    ? `<div class="banner"><span class="label">Deal at ${clock(o.deal.ts)}</span><span class="what">${iconHtml(market, o.deal.key, failed)}<span>${esc(l.name)}</span></span><span class="math">${esc(cap(l.listing))}, ${esc(l.why)}</span><span class="profit">${esc(l.profit)}</span></div>`
-    : '';
-  const table = rows.length
-    ? '<table><colgroup><col><col style="width:62px"><col style="width:62px"><col style="width:50px"><col style="width:72px"></colgroup>'
-      + '<thead><tr><th>Item</th><th class="n">Each</th><th class="n">Usual</th><th class="n" title="Price now vs usual price">%</th><th></th></tr></thead>'
-      + `<tbody>${rows.map((r) => overlayRowHtml(r, market, failed)).join('')}</tbody></table>`
-    : '<p class="empty">Open a shop in the game.</p>';
-  return head + hover + deal + table;
 }
 
 // ---------- price book ----------

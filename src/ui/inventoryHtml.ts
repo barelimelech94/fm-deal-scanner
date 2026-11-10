@@ -3,6 +3,7 @@
 import { listPrice, MODE_LABEL, needsCount, storeTotal, type AppraisalLine, type AppraisalResult, type LineSource, type LineTag } from '../appraisal/appraise';
 import { esc, fmt, fmtEach } from '../lib/format';
 import { marketTip, type MarketIndex } from '../market/marketIndex';
+import type { InventoryGlance } from './overlayHtml';
 import type { SetupStep } from './setupSteps';
 import { iconHtml } from './views';
 
@@ -46,7 +47,7 @@ export function inventoryRowHtml(l: AppraisalLine, market: MarketIndex, o: RowOp
     <td class="name"><span class="nm">${iconHtml(market, e.key, o.failed)}<span class="nm-t"><span class="nm-n">${esc(l.name)}</span>${note ? `<span class="sub">${esc(note)}</span>` : ''}</span></span></td>
     <td class="n"><input class="cellinput qty${need ? ' need' : ''}" data-id="${esc(e.id)}" data-field="qty" value="${fmt(e.qty)}" inputmode="numeric" aria-label="${l.set ? 'Sets' : 'Count'} of ${esc(l.name)}"></td>
     <td class="n">${l.unit == null ? '–' : fmtEach(l.unit)}${l.src ? `<span class="sub">${SRC_TEXT[l.src]}</span>` : ''}</td>
-    <td class="n"${l.tag === 'ignored' ? '' : ` title="${tip}"`}>${l.total == null ? '–' : fmt(l.total)}</td>
+    <td class="n"${l.tag === 'ignored' ? '' : ` title="${tip}"`}>${l.total == null ? '–' : fmt(l.total)}${need && l.tag === 'rough' ? '<span class="sub rough">rough</span>' : ''}</td>
     <td class="n"><input class="cellinput list" data-id="${esc(e.id)}" data-field="price" value="${list == null ? '' : fmt(list)}" placeholder="price?" inputmode="numeric" aria-label="List ${esc(l.name)} at, each" title="What to type in your store, each. Type your own price to use it for this item."></td>
     <td>${chip}</td>
     <td class="acts"><button class="x" data-id="${esc(e.id)}" data-act="skip" aria-pressed="${skip ? 'true' : 'false'}" aria-label="${skip ? 'Count' : 'Skip'} ${esc(l.name)}" title="${skip ? 'Count it again' : 'Leave it out of the worth'}">${skip ? '↺' : '⊘'}</button><button class="x" data-id="${esc(e.id)}" data-act="del" aria-label="Remove ${esc(l.name)}" title="Remove">×</button></td>
@@ -109,10 +110,11 @@ export function inventorySteps(s: InventorySetupState, act: { openPrices(): void
   ];
 }
 
-/** The pop-out overlay's block in inventory mode: the running worth, and the button that starts and pauses scanning. */
-export function overlayInventoryHtml(r: AppraisalResult, scanning: boolean, hint: string): string {
-  return `<div class="apbar${scanning ? ' on' : ''}"><div><b>Your items</b> <span class="dim">${esc(plural(r.kinds, 'item', 'items'))}</span>`
-    + `<div class="aptot">${esc(fmt(r.total))} <small>${esc(MODE_LABEL[r.mode].toLowerCase())}</small></div></div>`
-    + `<button class="btn small${scanning ? '' : ' primary'}" data-act="scan">${scanning ? 'Pause' : 'Scan my items'}</button></div>`
-    + (hint ? `<p class="apnote">${esc(hint)}</p>` : '');
+/** What the overlay shows of your items: the line hovered last (if it is still there), the worth and how many items. */
+export function inventoryGlance(r: AppraisalResult, o: { lastId: string | null; storeAdjust: number; market: MarketIndex; hint: string }): InventoryGlance {
+  const l = o.lastId == null ? undefined : r.lines.find((x) => x.entry.id === o.lastId);
+  const last = l
+    ? { key: l.entry.key, name: l.name, listAt: listPrice(l, o.storeAdjust), unit: l.unit, priceLabel: MODE_LABEL[r.mode], sales: o.market.get(l.entry.key)?.s ?? null }
+    : null;
+  return { last, worth: r.total, items: r.kinds, hint: o.hint };
 }

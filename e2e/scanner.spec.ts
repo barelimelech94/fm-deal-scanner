@@ -666,6 +666,46 @@ test('starts capture from Get started, and offers to mark the shop area when non
   expect(errors).toEqual([]);
 });
 
+test('the overlay follows the mode, and its switch sets the mode for the page', async ({ page }) => {
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await page.click('#btnStart');
+  await expect(page.locator('#statusText')).toContainText('Watching for shops');
+  await page.click('#btnPip');
+  /** The overlay's window, read and clicked from the page that opened it. */
+  type Pip = { documentPictureInPicture: { window: Window | null } };
+  const overlay = () => page.evaluate(() => (window as unknown as Pip).documentPictureInPicture.window?.document.getElementById('pipRoot')?.innerHTML ?? '');
+  const press = (act: string) => page.evaluate((a) => (window as unknown as Pip).documentPictureInPicture.window!.document.querySelector<HTMLElement>(`[data-act="${a}"]`)!.click(), act);
+  await expect.poll(overlay).toContain('<button data-act="mode-deals" aria-pressed="true">Deals</button>');
+  expect(await overlay()).toContain('Open a shop in the game.');
+
+  // Inventory in the overlay: the page opens Inventory, and the overlay shows your items
+  await press('mode-inventory');
+  await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveAttribute('id', 'view-inventory');
+  await expect(page.locator('#captureMode')).toHaveText('Inventory');
+  await expect.poll(overlay).toContain('<button data-act="mode-inventory" aria-pressed="true">Inventory</button>');
+  expect(await overlay()).toContain('<b>0</b><span class="dim">0 items</span>');
+  // scanning starts from the overlay, and the page knows
+  await press('scan');
+  await expect(page.locator('#apScan')).toHaveText('Pause');
+  await expect.poll(overlay).toContain('>Pause</button>');
+  // items added on the page show in the overlay's worth
+  await page.click('#apAddOpen');
+  await page.fill('#apAdd', 'Lemona x2');
+  await page.click('#apAddBtn');
+  await expect.poll(overlay).toContain('<b>42,000</b><span class="dim">1 item</span>');
+
+  // on Prices, the switch sets the mode and the page stays where it is
+  await view(page, 'prices');
+  await press('mode-deals');
+  await expect(page.locator('#captureMode')).toHaveText('Deals');
+  await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveAttribute('id', 'view-prices');
+  await expect.poll(overlay).toContain('<button data-act="mode-deals" aria-pressed="true">Deals</button>');
+  await page.reload();
+  await expect(page.locator('#captureMode')).toHaveText('Deals');
+  expect(errors).toEqual([]);
+});
+
 test('the deal rules in the Open shop sentence and the bell are the settings in Settings → Deals', async ({ page }) => {
   const { errors } = await open(page);
   const rule = (key: string) => page.locator(`.rules [data-setting="${key}"]`);

@@ -26,7 +26,6 @@ import { SettingsBinder } from './ui/settingsBind';
 import { captureDetails, SettingsView } from './ui/settingsView';
 import { Shell } from './ui/shell';
 import { Chime } from './ui/sound';
-import { freshDeal, hoverText, overlayHtml } from './ui/views';
 import { canvasAdapter, type Frame } from './vision/canvas';
 
 /** The page: builds the scanning and the views, and connects them. */
@@ -38,7 +37,7 @@ export class App {
   readonly scanner: Scanner<Frame, HTMLCanvasElement>;
   readonly capture = new ScreenCapture();
   readonly controller: ScanController<Frame, HTMLCanvasElement>;
-  private readonly overlay = new Overlay();
+  private readonly overlay: Overlay;
   private readonly chime = new Chime();
   private readonly calibration: Calibration;
   private readonly shell: Shell;
@@ -74,7 +73,7 @@ export class App {
     this.inventory = new InventoryView({
       engine: e, store: this.store, failed, region: () => this.itemsRegion, setScanning: (on) => this.setScanning(on),
       shown: shown('inventory'), version: () => String(this.data), capturing: () => this.capture.active,
-      openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), overlay: () => this.renderOverlay(),
+      openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), overlay: () => this.overlay.render(),
     });
     this.controller = new ScanController({
       engine: e, capture: this.capture, reader: this.reader, repeat: (tick) => new Ticker(tick),
@@ -86,10 +85,15 @@ export class App {
 
     const shopAndData = () => `${this.session.version}|${this.data}`;
     this.deals = new DealsView({
-      engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), overlay: () => this.renderOverlay(),
+      engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), overlay: () => this.overlay.render(),
       shown: shown('deals'), version: shopAndData,
       capturing: () => this.capture.active, looking: () => this.capture.active && this.controller.mode === 'deals',
       openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), markShop: () => void this.calibration.open('shop'),
+    });
+    this.overlay = new Overlay({
+      engine: e, session: this.session, failed, mode: () => this.controller.mode, capturing: () => this.capture.active,
+      scanning: () => this.inventory.scanning, rows: () => this.deals.rows(), inventory: () => this.inventory.glance(),
+      setMode: (m) => this.shell.followMode(m), toggleScanning: () => this.inventory.toggleScanning(), iconFailed: (img) => this.iconFailed(img),
     });
     this.prices = new PricesView({
       engine: e, failed, saveBook: () => this.saveBook(), setMarket: (m) => this.setMarket(m), changed: () => this.pricesChanged(),
@@ -112,7 +116,7 @@ export class App {
     this.bar = new CaptureBar(this.controller, {
       start: () => this.startCapture(),
       stop: () => this.controller.stopCapture(),
-      overlay: () => void this.openOverlay(),
+      overlay: () => void this.overlay.open(),
       dismissError: () => this.controller.dismissError(),
     });
     this.shell = new Shell({
@@ -151,7 +155,7 @@ export class App {
     window.addEventListener('pagehide', () => this.bookSave.flush());
     // the banner's 5 minutes and the hovered item's 90 seconds run out even when nothing is read, and the
     // Prices view's "last seen" and the market prices' age move on
-    setInterval(() => { if (!document.hidden) { this.deals.render(true); this.prices.render(true); this.renderOverlay(); } }, 15_000);
+    setInterval(() => { if (!document.hidden) { this.deals.render(true); this.prices.render(true); this.overlay.render(); } }, 15_000);
     setInterval(() => { if (this.shell.isShown('settings')) this.settingsView.renderTrouble(); }, 1000);
     this.loadGameData();
   }
@@ -185,7 +189,7 @@ export class App {
       if (this.shell.isShown('settings')) this.settingsView.renderTrouble();
       return;
     }
-    this.renderOverlay();
+    this.overlay.render();
   }
 
   private hoverChanged(ev: HoverEvent | null): void {
@@ -291,7 +295,7 @@ export class App {
     this.inventory.render({ force });
     this.prices.render(force);
     if (this.shell.isShown('settings')) this.settingsView.render();
-    this.renderOverlay();
+    this.overlay.render();
   }
 
   private iconFailed(img: HTMLImageElement): void {
@@ -300,27 +304,10 @@ export class App {
     img.remove();
   }
 
-  private renderOverlay(): void {
-    if (!this.overlay.win) return;
-    const h = this.session.hover, mode = this.controller.mode;
-    this.overlay.render(overlayHtml({
-      mode, open: this.session.open, capturing: this.capture.active, scanning: this.inventory.scanning, rows: this.deals.rows(),
-      deal: freshDeal(this.session, Date.now()), hover: hoverText(h, this.engine), hoverKey: h?.key ?? null,
-    }, this.engine.market, this.failedIcons, mode === 'inventory' ? this.inventory.overlayHtml() : ''));
-  }
-
   /** Live capture health, so a broken share is obvious at a glance. */
   private diag(): string {
     if (!this.capture.active) return '';
     const c = this.capture, area = this.controller.autoArea ? (this.scanner.found ? 'found' : 'looking') : this.region ? 'marked' : 'unset';
     return captureDetails({ ...c.describe(), framesIn: c.framesIn, idle: c.latestAt ? Date.now() - c.latestAt : null, reader: this.reader.ready, area });
-  }
-
-  private async openOverlay(): Promise<void> {
-    if (!Overlay.supported()) { $('btnPip').textContent = 'Overlay needs Chrome 116+'; return; }
-    try {
-      await this.overlay.open((img) => this.iconFailed(img), (act) => { if (act === 'scan') this.inventory.toggleScanning(); });
-      this.renderOverlay();
-    } catch (e) { console.warn(e); }
   }
 }

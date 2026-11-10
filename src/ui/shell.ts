@@ -62,6 +62,16 @@ export class Shell {
     this.show(viewFromHash(location.hash) ?? this.d.settings.view);
   }
 
+  /**
+   * The mode was chosen elsewhere (the overlay's switch): the page follows, opening the matching view when it shows
+   * Deals or Inventory. Prices and Settings stay put.
+   */
+  followMode(mode: ScanMode): void {
+    if (this.current === 'deals' || this.current === 'inventory') { this.show(mode); return; }
+    this.d.setMode(mode);
+    this.d.save();
+  }
+
   show(v: ViewName, focus = false): void {
     this.current = v;
     for (const x of VIEWS) {

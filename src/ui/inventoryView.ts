@@ -9,8 +9,9 @@ import { settingOf } from '../settings/schema';
 import type { Storage } from '../store/storage';
 import { $ } from './dom';
 import {
-  inventoryMeta, inventoryRowsHtml, inventorySteps, inventoryTotals, offerAsk, overlayInventoryHtml, shownLines,
+  inventoryGlance, inventoryMeta, inventoryRowsHtml, inventorySteps, inventoryTotals, offerAsk, shownLines,
 } from './inventoryHtml';
+import type { InventoryGlance } from './overlayHtml';
 import { DrawGate, setHidden, setHtml, setText } from './render';
 import { SetupSteps } from './setupSteps';
 
@@ -90,7 +91,9 @@ export class InventoryView {
   }
 
   /** What the pop-out overlay shows of your items. */
-  overlayHtml(): string { return overlayInventoryHtml(this.result(), this.scanning, this.hint); }
+  glance(): InventoryGlance {
+    return inventoryGlance(this.result(), { lastId: this.lastId, storeAdjust: this.settings.storeAdjust, market: this.d.engine.market, hint: this.hint });
+  }
 
   private save(): void { this.edits++; this.d.store.saveAppraisal(this.data); }
   private find(id: string | undefined) { return this.data.entries.find((x) => x.id === id); }

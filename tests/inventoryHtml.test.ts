@@ -50,6 +50,11 @@ describe('inventoryRowHtml', () => {
     expect(lemona).not.toContain(' need"');
     expect(lemona).toContain('>Priced</span>');
     expect(row(entry('Gloves Attack Scroll: Greater', 1, { counted: true }))).not.toContain('Type count');
+    // a rough price still says so, under the worth, when its chip asks for the count
+    const chaos = row(entry('Gloves Attack Scroll: Chaos'));
+    expect(chaos).toContain('>Type count</span>');
+    expect(chaos).toContain('<span class="sub rough">rough</span>');
+    expect(row(entry('Korean Fan'))).not.toContain('sub rough');
   });
 
   it('highlights the line hovered last', () => {

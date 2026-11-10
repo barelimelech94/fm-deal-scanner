@@ -3,7 +3,7 @@ import type { RawListing } from '../src/lib/types';
 import { newItem } from '../src/pricing/priceBook';
 import { ShopSession } from '../src/shop/session';
 import {
-  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, marketLoadText, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, shopMeta, shopRowHtml, sortRows,
+  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, marketLoadText, nextSort, parsePriceLines, shopMeta, shopRowHtml, sortRows,
 } from '../src/ui/views';
 import { DEFAULT_SETTINGS } from '../src/lib/types';
 import { catalogOf, engine, NOW } from './helpers/market';
@@ -66,29 +66,9 @@ describe('shop rows', () => {
     const { e, rows } = shop([raw('<img src=x onerror=alert(1)>', 100)]);
     expect(shopRowHtml(rows[0]!, e.market)).not.toContain('<img src=x');
   });
-  it('shows price now, usual price and the difference in the overlay', () => {
-    const { e, rows } = shop([raw('Tobi Throwing Stars', 900000, { qty: 500 })]);
-    const html = overlayRowHtml(rows[0]!, e.market);
-    expect(html).toContain('<td class="n">900,000</td><td class="n dim">1.85M</td><td class="n pos">-51%</td>');
-  });
   it('sums up the shop', () => {
     const { s, rows } = shop([raw('Dark Guardian', 40000), raw('Lemona', 30000), raw('Lemona', 30000)]);
     expect(shopMeta(s, rows)).toBe('3 listings, 1 deal');
-  });
-});
-
-describe('overlay', () => {
-  const state = { mode: 'deals' as const, open: false, capturing: true, scanning: false, rows: [], deal: null, hover: '', hoverKey: null };
-  it('shows a placeholder without a shop', () => {
-    const e = engine();
-    const html = overlayHtml(state, e.market);
-    expect(html).toContain('Open a shop in the game.');
-    expect(html).toContain('<b>Deals</b><span>Watching</span>');
-  });
-  it("shows your items' part in inventory mode, and nothing of the shop", () => {
-    const e = engine();
-    const html = overlayHtml({ ...state, mode: 'inventory', scanning: true, hover: 'Traus', hoverKey: 'traus' }, e.market, undefined, '<div id="mine"></div>');
-    expect(html).toBe('<div class="ph"><b>Inventory</b><span>Scanning</span></div><div id="mine"></div>');
   });
 });
 
