@@ -9,7 +9,7 @@ import { npcSellPrice } from '../src/market/marketIndex';
 import { parseTrackerPage } from '../src/market/parseTrackerPage';
 import { evaluate } from '../src/pricing/evaluate';
 import { ShopSession } from '../src/shop/session';
-import { appraisalRowHtml } from '../src/ui/appraisalViews';
+import { inventoryRowHtml } from '../src/ui/inventoryHtml';
 import { dealLine, marketInfo, shopRowHtml } from '../src/ui/views';
 import { engine, market, NOW } from './helpers/market';
 
@@ -180,7 +180,7 @@ describe('a shop listing and an NPC', () => {
   });
 });
 
-describe('an item in the appraisal and an NPC', () => {
+describe('an item in your inventory and an NPC', () => {
   const en = e();
   const line = (name: string, qty = 1, over = {}) => appraiseEntry(en, { ...entryFor(en, name, qty), ...over }, 'fair');
 
@@ -209,16 +209,16 @@ describe('an item in the appraisal and an NPC', () => {
     expect(off).toMatchObject({ unit: null, tag: 'unpriced', npc: null });
   });
 
-  it('is the same in every appraisal mode', () => {
+  it('is the same at either price, Market or Asking', () => {
     expect(appraiseEntry(en, entryFor(en, 'Plain Gloves'), 'greedy')).toMatchObject({ unit: 4000, src: 'npc' });
   });
 
   it('shows what the NPC pays, and where the price came from', () => {
-    const html = appraisalRowHtml(line('Plain Gloves'), en.market);
+    const html = inventoryRowHtml(line('Plain Gloves'), en.market, { storeAdjust: 0 });
     expect(html).toContain('NPC pays 4,000');
     expect(html).toContain('<span class="sub">NPC price</span>');
     expect(html).toContain('what an NPC pays for it: the least it is worth');
-    expect(appraisalRowHtml(line('Free Hat'), en.market)).not.toContain('NPC');
+    expect(inventoryRowHtml(line('Free Hat'), en.market, { storeAdjust: 0 })).not.toContain('NPC');
   });
 });
 

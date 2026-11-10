@@ -9,7 +9,7 @@
 export type PriceMode = 'cheap' | 'fair' | 'greedy';
 export type AppraisalMode = Exclude<PriceMode, 'cheap'>;
 
-/** What the appraisal's table is ordered by. `added` is the default: the order the lines were added in. */
+/** What an old version ordered your items by. No longer used, but still read, so settings saved then still load. */
 export type AppraisalSortCol = 'added' | 'name' | 'qty' | 'unit' | 'total';
 
 /** What the open shop's table is ordered by. `best` is the default: deals first, then by how far under the usual price. */
@@ -193,6 +193,8 @@ export interface AppraisalEntry {
   ignored?: boolean;
   /** a stack added by hovering: its size is not known (the number on a slot is not read), so it counts as 1 until typed */
   unsure?: boolean;
+  /** you typed its count: a count of 1 is then not asked for again */
+  counted?: boolean;
 }
 
 export interface AppraisalData { entries: AppraisalEntry[] }

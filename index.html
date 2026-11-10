@@ -88,61 +88,82 @@
     </section>
   </section>
 
-  <section class="view" id="view-inventory" role="tabpanel" aria-labelledby="tab-inventory" tabindex="-1" hidden>
-    <section class="panel lead" aria-labelledby="hAppr">
+  <section class="view two" id="view-inventory" role="tabpanel" aria-labelledby="tab-inventory" tabindex="-1" hidden>
+    <section class="panel setup" id="invSetup" aria-labelledby="hInvSetup" hidden>
+      <h2 id="hInvSetup">Get started</h2>
+      <div id="invSteps"></div>
+    </section>
+
+    <section class="panel lead inv" aria-labelledby="hAppr">
       <div class="panel-head">
         <h2 id="hAppr">Inventory</h2>
-        <span class="headtools"><button class="btn small" id="apSortReset" hidden title="Back to the order the lines were added in">As added</button><span class="meta" id="apMeta">Nothing added yet</span></span>
+        <span class="meta invmeta"><span id="apMeta">No items yet</span><span class="sep" id="apNeedWrap" hidden><button class="linkbtn" id="apNeedCount" aria-pressed="false"></button></span><span class="sep" id="apNoPrice" hidden></span></span>
       </div>
       <div class="panel-body">
-        <p class="note">What a pile of items is worth, for when someone asks "how much for all?". Press <b>Start scanning hovers</b> and point at your items in the game, one by one: each is added as its tooltip shows. Pause before moving over things you don't want counted. Or type the names below.</p>
+        <div class="invtotals">
+          <div><span class="dim">Worth</span><b id="apTotal">0</b></div>
+          <div><span class="dim">In your store</span><b id="apStore">0</b></div>
+        </div>
+        <p class="note invleft" id="apLeft"></p>
         <div class="aptoolbar">
-          <button class="btn primary" id="apScan" aria-pressed="false">Start scanning hovers</button>
-          <span class="apstate" id="apState" data-on="false">Paused</span>
-          <button class="btn ghost" id="apUndo" disabled>Undo last</button>
+          <button class="btn primary" id="apScan" aria-pressed="false">Scan my items</button>
+          <button class="btn" id="apUndo" disabled>Undo</button>
+          <button class="btn" id="apAddOpen" aria-controls="apAddBox">+ Add by name</button>
+          <button class="btn ghost" id="apClear" disabled>Clear</button>
         </div>
-        <p class="note aphint" id="apHint" hidden></p>
-        <div class="aprow">
-          <label class="field"><span>Prices</span>
-            <select id="apMode" data-setting="appraisalMode"><option value="fair">Fair</option><option value="greedy">Greedy</option></select></label>
-          <label class="field"><span>Offer <em>% of the total</em></span><input id="apBulk" data-setting="bulkOffer" type="number" min="1" max="300" step="1"></label>
-          <label class="field"><span>Order</span>
-            <select id="apOrder"><option value="added">As added</option><option value="total:-1">Most valuable first</option><option value="name:1">Name, A to Z</option><option value="qty:-1">Most of them first</option><option value="unit:-1">Dearest each first</option><option value="custom" hidden>Custom</option></select></label>
-          <p class="note" id="apModeNote"></p>
-        </div>
-        <div class="tablewrap">
+        <p class="note aphint" id="apHint" role="status" hidden></p>
+        <div class="tablewrap invtable">
           <table id="apTable" hidden>
             <thead><tr>
-              <th class="sortable" data-col="name" tabindex="0">Item</th>
-              <th class="sortable n" data-col="qty" tabindex="0">Qty</th>
-              <th class="sortable n" data-col="unit" tabindex="0" title="Type a price to use instead of the market's, for this line only. Click to put the dearest first.">Each</th>
-              <th class="sortable n" data-col="total" tabindex="0" title="Click to put the most valuable first">Total</th>
+              <th>Item</th>
+              <th class="n">Count</th>
+              <th class="n">Price each</th>
+              <th class="n">Worth</th>
+              <th class="n" title="What to type in your store, each">List at</th>
               <th></th>
               <th></th>
             </tr></thead>
             <tbody id="apBody"></tbody>
           </table>
         </div>
-        <p class="empty" id="apEmpty">Nothing here yet. Add item names below.</p>
-        <p class="note aprough" id="apWarn" hidden></p>
-        <div class="aptotals">
-          <div><span class="dim">Total</span><b id="apTotal">0</b><small id="apRough"></small></div>
-          <div><span class="dim" id="apOfferLabel">Offer at 100%</span><b id="apOffer">0</b></div>
-        </div>
-        <p class="apquote"><output id="apQuote">Nothing to appraise yet</output></p>
-        <div class="row">
-          <button class="btn primary" id="apCopy" disabled>Copy quote</button>
-          <button class="btn" id="apCopyFull" disabled>Copy full list</button>
-          <button class="btn ghost" id="apClear" disabled>Clear</button>
-        </div>
-        <h3 class="aphead"><label for="apAdd">Add items</label></h3>
-        <textarea id="apAdd" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
-        <div class="row">
-          <button class="btn" id="apAddBtn">Add to inventory</button>
-        </div>
-        <p class="note" id="apMsg"></p>
+        <p class="empty" id="apEmpty">No items yet. Press Scan my items and point at them in the game, or add them by name.</p>
+        <details class="more" id="apAddBox">
+          <summary>Add items by typing</summary>
+          <textarea id="apAdd" aria-label="Items to add, one per line" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
+          <div class="row">
+            <button class="btn" id="apAddBtn">Add to inventory</button>
+          </div>
+        </details>
+        <p class="note" id="apMsg" role="status"></p>
       </div>
     </section>
+
+    <section class="panel quiet" aria-labelledby="hStore">
+      <div class="panel-head"><h2 id="hStore">Store prices</h2></div>
+      <div class="panel-body stack">
+        <div class="pricerow" role="radiogroup" aria-label="Price items at">
+          <span class="lbl">Price items at</span>
+          <span class="seg">
+            <label><input type="radio" name="apMode" value="fair" data-setting="appraisalMode"><span>Market</span></label>
+            <label><input type="radio" name="apMode" value="greedy" data-setting="appraisalMode"><span>Asking</span></label>
+          </span>
+        </div>
+        <p class="note" id="apModeNote"></p>
+        <p class="sentence">List at <input class="inline" id="apAdjust" type="text" inputmode="numeric" data-setting="storeAdjust" aria-label="List at, in % of the price">% of that</p>
+        <div class="row"><button class="btn" id="apCopyStore" disabled>Copy store prices</button></div>
+        <p class="note">One line per item, in the order they were added.</p>
+      </div>
+    </section>
+
+    <details class="panel quiet sell" id="apSell">
+      <summary><h2>Sell everything at once</h2></summary>
+      <div class="panel-body stack">
+        <p class="sentence">Offer <input class="inline" id="apBulk" type="text" inputmode="numeric" data-setting="bulkOffer" aria-label="Offer, in % of the worth">% of the worth</p>
+        <p class="offer"><b id="apOffer">You'd ask 0</b></p>
+        <p class="apquote"><output id="apQuote">No items yet</output></p>
+        <div class="row"><button class="btn" id="apCopy" disabled>Copy offer</button></div>
+      </div>
+    </details>
   </section>
 
   <section class="view two" id="view-prices" role="tabpanel" aria-labelledby="tab-prices" tabindex="-1" hidden>

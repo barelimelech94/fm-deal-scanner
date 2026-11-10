@@ -1,9 +1,8 @@
 import type { Engine } from '../engine';
 import type { AppraisalData, AppraisalEntry, TooltipRead } from '../lib/types';
-import { isEquipId } from '../market/equipFacts';
-import { hasStats, statSig } from '../tooltip/statValue';
+import { statSig } from '../tooltip/statValue';
 import { sigDiff } from '../vision/signature';
-import { addEntry, clampQty, entryFor } from './entries';
+import { addEntry, clampQty, entryFor, isEquipItem } from './entries';
 
 /** What a hover did, in words for the panel. */
 export interface HoverEvent {
@@ -23,11 +22,6 @@ interface Slot { key: string; sig: string; x: number; y: number; entryId: string
 interface Undo { slot: Slot; created: boolean }
 
 const MAX_SLOTS = 600;
-/** An equip is one item, anything else a stack: told by the item's id, or by its tooltip when the id is not known. */
-const isEquip = (e: Engine, key: string, t: TooltipRead): boolean => {
-  const id = e.market.iconId(key);
-  return id != null ? isEquipId(id) : hasStats(t);
-};
 
 /**
  * Turns the tooltips read while scanning into lines of the appraisal. One slot hovered is one item (an equip) or
@@ -80,7 +74,7 @@ export class HoverCollector {
 
   /** Puts a read tooltip on the appraisal. `count` is the stack size read off the slot, when it could be. */
   ingest(tip: TooltipRead, spot: HoverSpot, count: number | null = null): HoverEvent {
-    const made = entryFor(this.e, tip.name), equip = isEquip(this.e, made.key, tip), sig = statSig(tip);
+    const made = entryFor(this.e, tip.name), equip = isEquipItem(this.e, made.key, tip), sig = statSig(tip);
     if (equip) made.tip = tip; else made.qty = clampQty(count ?? 1);
     const near = (s: Slot) => Math.abs(s.x - spot.x) < spot.pitch * 0.75 && Math.abs(s.y - spot.y) < spot.pitch * 0.75;
     const known = this.slots.find((s) => s.key === made.key && s.sig === sig && near(s));
@@ -106,7 +100,7 @@ export class HoverCollector {
     this.undos.push({ slot, created: entry === made });
     this.refresh(entry);
     return this.event({
-      kind: 'added', text: `Added ${made.name}${made.qty > 1 ? ` ×${made.qty}` : ''}${unsure ? ': type how many you have in its Qty box' : ''}`, warn: unsure, entryId: entry.id,
+      kind: 'added', text: `Added ${made.name}${made.qty > 1 ? ` ×${made.qty}` : ''}${unsure ? ': type how many you have in its Count box' : ''}`, warn: unsure, entryId: entry.id,
     });
   }
 

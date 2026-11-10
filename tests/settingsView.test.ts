@@ -178,6 +178,28 @@ describe('the settings binder', () => {
     expect(changed).toEqual([]);
   });
 
+  it('shows a list setting as radio buttons, one option each', () => {
+    const { settings, changed } = bound('<input type="radio" name="m" id="f" value="fair" data-setting="appraisalMode"><input type="radio" name="m" id="g" value="greedy" data-setting="appraisalMode"><select id="s" data-setting="appraisalMode"><option value="fair"></option><option value="greedy"></option></select>');
+    const radio = (id: string) => document.querySelector<HTMLInputElement>(`#${id}`)!;
+    expect([radio('f').checked, radio('g').checked]).toEqual([true, false]);
+    radio('g').checked = true;
+    radio('g').dispatchEvent(new Event('change'));
+    expect(settings.appraisalMode).toBe('greedy');
+    expect(document.querySelector<HTMLSelectElement>('#s')!.value).toBe('greedy');
+    expect([radio('f').checked, radio('g').checked, radio('g').value]).toEqual([false, true, 'greedy']);
+    expect(changed).toEqual(['appraisalMode']);
+  });
+
+  it('reads a plus or a minus in front of a percent typed in a text box', () => {
+    const { settings, type, val } = bound('<input type="text" id="a" data-setting="storeAdjust">');
+    type('#a', '+5');
+    expect([settings.storeAdjust, val('#a')]).toEqual([5, '5']);
+    type('#a', '-10');
+    expect([settings.storeAdjust, val('#a')]).toEqual([-10, '-10']);
+    type('#a', '+-3');
+    expect(settings.storeAdjust).toBe(-10);
+  });
+
   it('turns a switch on and off', () => {
     const { settings, changed } = bound('<input type="checkbox" id="s" data-setting="sound">');
     const el = document.querySelector<HTMLInputElement>('#s')!;

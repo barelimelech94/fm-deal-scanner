@@ -1,17 +1,20 @@
 import type { Settings } from '../lib/types';
 import { sanitizeValue, settingOf, type SettingDef, type SettingValue } from '../settings/schema';
 
-/** A control a setting is shown in: a number box, a list, a switch (a checkbox), or an on/off button (`aria-pressed`). */
+/**
+ * A control a setting is shown in: a number box, a list, a switch (a checkbox), an on/off button (`aria-pressed`),
+ * or one of a group of radio buttons for a list (each with one option as its value).
+ */
 type Control = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
 /**
  * A number as a player types it: digits, with thousands commas only where they belong ("3,000", "1,250,000"), an
- * optional decimal part, and an optional k or m ("5k" is 5,000, "1.5m" is 1,500,000), and a minus for the settings that go below 0; spaces around it are ignored.
+ * optional decimal part, and an optional k or m ("5k" is 5,000, "1.5m" is 1,500,000), and a minus for the settings that go below 0 (or a plus, "+5"); spaces around it are ignored.
  * A decimal part of exactly three digits with no k or m ("3.000") is refused: it reads as thousands written with a
  * dot. Anything else ("12 500", "2,5", "abc", "") is null, so nothing is guessed.
  */
 export function parseTypedNumber(raw: string): number | null {
-  const m = raw.trim().toLowerCase().match(/^(-?)(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?([km])?$/);
+  const m = raw.trim().toLowerCase().match(/^([-+]?)(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?([km])?$/);
   if (!m || (m[3]?.length === 3 && !m[4])) return null;
   const v = parseFloat(`${m[1]}${m[2]!.replace(/,/g, '')}${m[3] ? `.${m[3]}` : ''}`);
   return m[4] === 'k' ? v * 1e3 : m[4] === 'm' ? v * 1e6 : v;
@@ -81,6 +84,7 @@ export class SettingsBinder {
         const shown = inputValue(def, v, isTextBox(el));
         if (isButton(el)) el.setAttribute('aria-pressed', String(shown.checked));
         else if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = shown.checked;
+        else if (el instanceof HTMLInputElement && el.type === 'radio') el.checked = el.value === shown.value;
         else el.value = shown.value;
       }
     }

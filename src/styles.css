@@ -148,9 +148,10 @@ main { max-width: 1320px; margin: 0 auto; }
 .step.done .n { background: var(--deal-bg); border-color: var(--deal); color: var(--deal); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* The deal rules, as a sentence with their three settings in it */
+/* The deal rules, as a sentence with their three settings in it; Inventory's List at and Offer are sentences too */
 .rules { margin: 0 18px 12px; font-size: .9rem; color: var(--muted); }
-.rules .inline {
+.sentence { font-size: .9rem; color: var(--muted); }
+.rules .inline, .sentence .inline {
   width: 3.4em; padding: 2px 6px; margin: 0 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2);
   color: var(--ink); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums;
 }
@@ -242,42 +243,57 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .deals .p { color: var(--deal); font: 800 1.05rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
 .dealscroll { max-height: 330px; overflow: auto; }
 
-/* Appraisal: the list, then the total and the offer big enough to read off in a trade */
-.aprow { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; margin: 10px 0 12px; }
-.aprow .field { min-width: 150px; }
-.aprow .note { flex: 1 1 260px; align-self: center; }
-#apTable td { vertical-align: top; }
+/* Inventory: what you are worth and what your store asks, then your items with their List at price */
+.view.two > .inv { grid-column: 1 / -1; }
+.invmeta .sep::before { content: "·"; margin: 0 6px; }
+#apNeedCount[aria-pressed="true"] { text-decoration: none; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+#apNeedCount[aria-pressed="true"]::after { content: " ×"; }
+.invtotals { display: flex; flex-wrap: wrap; gap: 4px 48px; margin: 2px 0 2px; }
+.invtotals > div { display: grid; }
+.invtotals .dim { font-size: .86rem; font-weight: 700; }
+.invtotals b { font: 800 2.1rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.invleft { margin: 2px 0 0; }
+.aptoolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 6px; }
+#apClear { margin-left: auto; }
+.aphint { margin: 2px 0 8px; }
+.aphint.bad { color: var(--high); }
+.invtable { max-height: 560px; overflow: auto; }
 #apTable td.acts { white-space: nowrap; text-align: right; }
-#apTable .sub { text-align: right; }
+#apTable td .sub { text-align: right; }
 #apTable td.name .sub { text-align: left; }
 tr.ap-ignored td { color: var(--sold); }
 tr.ap-ignored .nm-n { text-decoration: line-through; }
 tr.ap-unpriced td:first-child { box-shadow: inset 3px 0 0 var(--high); }
-
-.aprough { color: var(--high); margin-top: 8px; }
-.aptoolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 12px 0 6px; }
-.apstate { align-self: center; padding: 3px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
-.apstate[data-on="true"] { background: var(--deal-bg); color: var(--deal); border-color: var(--deal); }
-.aphint { margin: 2px 0 8px; }
-.aphint.bad { color: var(--high); }
-.cellinput.unsure { border-color: var(--accent); background: var(--accent-soft); }
-td .sub.warn { color: var(--accent); }
-/* the overlay's appraisal block */
+tr.last td { background: var(--new-bg); }
+tr.last td:first-child { box-shadow: inset 3px 0 0 var(--new); }
+.cellinput.qty { width: 72px; }
+.cellinput.need { border-color: var(--accent); background: var(--accent-soft); }
+.cellinput.list { width: 104px; font-weight: 800; font-size: .95rem; border-color: var(--muted); background: var(--panel); }
+.chip.need { background: var(--accent-soft); color: var(--accent); }
+.pricerow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
+.pricerow .lbl { color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel-2); }
+.seg label { cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg span { display: block; padding: 4px 14px; font-weight: 700; color: var(--muted); }
+.seg label + label span { border-left: 1px solid var(--line); }
+.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -2px; }
+details.sell > summary { cursor: pointer; list-style: none; padding: 14px 18px; display: flex; align-items: center; gap: 8px; }
+details.sell > summary::-webkit-details-marker { display: none; }
+details.sell > summary::before { content: "▸"; color: var(--muted); }
+details.sell[open] > summary::before { content: "▾"; }
+details.sell > summary h2 { display: inline; }
+details.sell[open] > summary { padding-bottom: 10px; }
+.offer { font: 800 1.5rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
+.apquote output { display: inline-block; padding: 6px 12px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); font-weight: 700; user-select: all; }
+/* the overlay's inventory block */
 .pip .apbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
 .pip .apbar.on { border-color: var(--deal); background: var(--deal-bg); }
 .pip .apbar b { font: 700 .95rem/1.2 var(--f-display); }
 .pip .aptot { font: 800 1.35rem/1.15 var(--f-display); font-variant-numeric: tabular-nums; }
 .pip .aptot small { font: 600 .74rem/1 var(--f-body); color: var(--muted); }
 .pip .apnote { margin: 0 0 6px; font-size: .78rem; color: var(--muted); }
-.pip .apnote.warn { color: var(--high); }
-.aptotals { display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 14px 0 6px; }
-.aptotals > div { display: grid; }
-.aptotals b { font: 800 1.9rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
-.aptotals small { color: var(--accent); }
-.aptotals small:empty { display: none; }
-.apquote { margin: 4px 0 12px; }
-.apquote output { display: inline-block; padding: 6px 12px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); font-weight: 700; user-select: all; }
-.aphead { margin: 18px 0 6px; font-size: .95rem; }
 
 /* Price book */
 .note.legend { max-width: none; }
