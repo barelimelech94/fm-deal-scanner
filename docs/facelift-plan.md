@@ -14,8 +14,8 @@ accuracy benchmark (`npm run bench`) must report the same numbers before and aft
 
 ### 1.1 Layout
 
-- One page, 2,700 px tall on a desktop and 5,300 px on a phone: Open shop, Deals, Rules, Appraisal, Price book,
-  Prices and backup. The two features are stacked, not separated.
+- One page, 2,700 px tall: Open shop, Deals, Rules, Appraisal, Price book, Prices and backup. The two features
+  are stacked, not separated.
 - Settings live in five places: the header (Sound), Rules (12 fields), the Appraisal toolbar (4), the Price book
   (per item) and Prices and backup. Rules mixes three unrelated things: what counts as a deal, how any item is
   priced (used by both features), and how the screen is read.
@@ -179,7 +179,7 @@ label, a help line and limits. Values are clamped to their limits when typed and
 | Rules: Shop area, Read stats on hover, Check every | Settings → Reading the screen |
 | Appraisal: Count hovers, Mark area | Settings → Inventory |
 | Appraisal: Prices, Offer % | Inventory: Store prices, Sell everything at once |
-| Appraisal: Order list | Column headings; a small Sort control only on phones, where headings are hidden |
+| Appraisal: Order list | Removed. The column headings order the lines. |
 | Appraisal: Add items box | Inventory: Add by name |
 | Price book, Market prices, Your prices | Prices view |
 | Backup, Clear all sightings | Settings → Data |
@@ -196,8 +196,11 @@ Follows the mode, with a two-way switch (Deals | Inventory) in its header that a
 
 Keep the colours, the two typefaces and light/dark. Change hierarchy and density: a sticky bar, one main card
 per view, secondary cards quieter, help text inside closed disclosures, no paragraph longer than two lines on
-a working view. Works at 390 px wide without sideways scrolling: tabs stay one row, cards stack, tables become
-cards as the appraisal table does today.
+a working view.
+
+This is a desktop tool (it needs Chrome's screen capture). It is laid out for a browser window 900 px wide and
+up, two columns from 1060 px. There is no phone layout: the phone-only pieces that exist today (the appraisal
+table's card form under 640 px, the Order list, the phone end-to-end test) are removed, not carried over.
 
 ## 3. Work
 
@@ -296,9 +299,9 @@ name, the need-a-count filter and Enter-to-next, the highlighted last-hovered ro
 **B10. Tests and docs.** The end-to-end suite keeps every scenario it has, moved to the new views, and gains:
 tabs and the remembered view; one text-reading pass per inventory hover and nothing in Deals; a setting changed
 in one place shows in the other; limits; backup round trip with settings; two market files adding up; a sold
-listing leaving the table; the Get started steps. README rewritten for the new structure, shorter.
+listing leaving the table; the Get started steps. The phone test and the Order-list steps go. README rewritten for the new structure, shorter.
 
-**B11. Visual pass** as 2.9, checked on screenshots at 1400 and 390 px wide, light and dark.
+**B11. Visual pass** as 2.9, checked on screenshots at 1400 and 1000 px wide, light and dark.
 
 ## 4. Rules for the work
 
@@ -311,6 +314,7 @@ listing leaving the table; the Get started steps. README rewritten for the new s
 - Element ids the tests use stay where the element survives (`shopTable`, `dealBanner`, `apBody`, `bookTable`,
   `fileMarket`, `fileShot`, `fileImport`, `statusText`, `body[data-scans]`, `window.FM`).
 - Words on the page: plain and short, as now. "Inventory", not "Appraisal"; "items", not "kinds".
+- Desktop only. No phone layout, no phone tests.
 - Keyboard and screen readers: real tabs (`role="tablist"`), visible focus, status as a live region.
 
 ## 5. Not in this round
