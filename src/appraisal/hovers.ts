@@ -1,7 +1,7 @@
 import type { Engine } from '../engine';
 import type { AppraisalData, AppraisalEntry, TooltipRead } from '../lib/types';
 import { isEquipId } from '../market/equipFacts';
-import { statSig } from '../tooltip/statValue';
+import { hasStats, statSig } from '../tooltip/statValue';
 import { sigDiff } from '../vision/signature';
 import { addEntry, clampQty, entryFor } from './entries';
 
@@ -23,9 +23,6 @@ interface Slot { key: string; sig: string; x: number; y: number; entryId: string
 interface Undo { slot: Slot; created: boolean }
 
 const MAX_SLOTS = 600;
-/** Equips carry stats or upgrade slots on their tooltip; scrolls, potions and the like do not, and stack. */
-export const hasStats = (t: TooltipRead): boolean => t.stats.length > 0 || t.remaining != null;
-
 /** An equip is one item, anything else a stack: told by the item's id, or by its tooltip when the id is not known. */
 const isEquip = (e: Engine, key: string, t: TooltipRead): boolean => {
   const id = e.market.iconId(key);

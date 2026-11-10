@@ -118,6 +118,10 @@ describe('evaluate', () => {
       it('settles "copies sell for very different prices": the stats are the difference', () => {
         expect(evaluate(flagged('w'), cheap)).toMatchObject({ verdict: 'deal', why: '' });
       });
+      it('leaves it rough when the tooltip showed no stat lines and no slots: nothing was read', () => {
+        const blank: TooltipRead = { ...tip(60, 7), stats: [], remaining: null };
+        expect(evaluate(flagged('w'), { ...cheap, tip: blank })).toMatchObject({ verdict: 'unsure', why: expect.stringContaining('very different prices') });
+      });
       it('leaves a price from fewer than 5 sales rough', () => {
         expect(evaluate(flagged('l'), cheap)).toMatchObject({ verdict: 'unsure', why: expect.stringContaining('fewer than 5') });
       });

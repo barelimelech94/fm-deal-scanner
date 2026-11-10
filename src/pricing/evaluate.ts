@@ -1,7 +1,7 @@
 import { equipFact, type Engine } from '../engine';
 import type { BookItem, Evaluation, Listing, MarketItem, PriceMode, Settings, TooltipRead, UsualSource } from '../lib/types';
 import { isRough, npcSellPrice } from '../market/marketIndex';
-import { statValue } from '../tooltip/statValue';
+import { hasStats, statValue } from '../tooltip/statValue';
 import { sightingStats, type SightingStats } from './priceBook';
 
 export interface Usual { value: number; src: UsualSource; rough: boolean }
@@ -58,7 +58,7 @@ export function evaluate(e: Engine, row: Judged): Evaluation {
   // stats read from the hover tooltip scale the usual price, and settle "copies sell for very different prices"
   const stats = row.tip ? statValue(row.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, row.key) }) : null;
   const usualBase = u && stats ? u.value : null;
-  if (u && stats) u = { ...u, value: u.value * stats.mult, rough: u.rough && isRough(mk, true) };
+  if (u && stats) u = { ...u, value: u.value * stats.mult, rough: u.rough && isRough(mk, hasStats(row.tip)) };
   // an NPC pays the same for any copy, stats or not, and takes any stack; sets (stars) are priced as a whole
   const npcEach = row.set ? null : npcSellPrice(mk, e.settings.npcRatio);
   const out: Evaluation = {
@@ -76,7 +76,7 @@ export function evaluate(e: Engine, row: Judged): Evaluation {
   if (out.verdict === 'deal' && u?.rough) {
     out.verdict = 'unsure';
     // with its stats read, a copy's price is settled: what is left is the few sales
-    out.why = !stats && (mk?.f ?? '').includes('w')
+    out.why = !hasStats(row.tip) && (mk?.f ?? '').includes('w')
       ? 'Copies of this item sell for very different prices. Check its stats before buying.'
       : 'The market price comes from fewer than 5 sales.';
   }

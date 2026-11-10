@@ -15,6 +15,12 @@ const SLOT_TYPES: readonly [RegExp, number][] = [
 export const slotsForType = (type: string): number => SLOT_TYPES.find(([re]) => re.test(type))?.[1] ?? 0;
 
 /** A copy is known by its stats: hovering the same copy again reads the same. */
+/**
+ * Whether stats were read off this tooltip: its stat lines or its upgrade slots. Equips carry them; scrolls,
+ * potions and the like do not, and stack.
+ */
+export const hasStats = (t: TooltipRead | null | undefined): boolean => !!t && (t.stats.length > 0 || t.remaining != null);
+
 export const statSig = (t: TooltipRead): string => t.stats.map((x) => `${x.label}:${x.total}/${x.base}`).join(';') + `|${t.remaining ?? ''}`;
 
 /**

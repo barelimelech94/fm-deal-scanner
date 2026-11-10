@@ -67,6 +67,8 @@ describe('appraise', () => {
     const tag = (f: string, tip?: TooltipRead) => appraiseEntry(flagged(f), entry('Traus', 1, tip && { tip }), 'fair').tag;
     expect(['w', 'l', 'lw'].map((f) => tag(f))).toEqual(['rough', 'rough', 'rough']);
     expect(['w', 'l', 'lw'].map((f) => tag(f, trausTip))).toEqual(['priced', 'rough', 'rough']);
+    const blank: TooltipRead = { ...trausTip, stats: [], remaining: null };   // an equip whose tooltip showed nothing to read
+    expect(tag('w', blank)).toBe('rough');
     expect(appraise(flagged('l'), [entry('Traus', 1, { tip: trausTip }), entry('Lemona')], 'fair')).toMatchObject({ total: 46200 + 21000, rough: 46200 });
   });
 

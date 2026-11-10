@@ -2,7 +2,7 @@ import { equipFact, type Engine } from '../engine';
 import type { AppraisalEntry, AppraisalMode, AppraisalSortCol, StatValue, UsualSource } from '../lib/types';
 import { isRough, isSetItem, npcSellPrice } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
-import { statValue } from '../tooltip/statValue';
+import { hasStats, statValue } from '../tooltip/statValue';
 
 /** What the appraisal's modes mean, in words, for the panel. */
 export const APPRAISAL_MODES: Record<AppraisalMode, { label: string; blurb: string }> = {
@@ -63,7 +63,7 @@ export function appraiseEntry(e: Engine, entry: AppraisalEntry, mode: AppraisalM
     ? statValue(entry.tip, { statPct: e.settings.statPct, slotWorth: e.settings.slotWorth, maxSlotsSeen: it?.maxSlots, fact: equipFact(e, entry.key) })
     : null;
   let unit = u ? u.value * (stats?.mult ?? 1) : null, src: LineSource | null = u?.src ?? null;
-  let rough = !!u?.rough && isRough(mk, stats != null);
+  let rough = !!u?.rough && isRough(mk, hasStats(entry.tip));
   // an NPC pays its price for any copy, so nothing is worth less: with no market price it is the price, and it lifts
   // a lower one. A price typed on the line stays as typed.
   const npc = set ? null : npcSellPrice(mk, e.settings.npcRatio);
