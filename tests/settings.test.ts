@@ -61,7 +61,7 @@ describe('sanitizeSettings', () => {
   });
 
   it('puts back the default for what is not a value of the setting', () => {
-    const s = sanitizeSettings({ discount: 'lots', fee: NaN, base: 'mean', sound: 'yes', market: true, mode: 'shop', view: 'other', shopSort: 'price', appraisalSortDir: 0 } as never);
+    const s = sanitizeSettings({ discount: 'lots', fee: NaN, base: 'mean', sound: 'yes', market: true, mode: 'shop', view: 'other', shopSort: 'price', shopSortDir: 0 } as never);
     expect(s).toEqual(DEFAULT_SETTINGS);
   });
 

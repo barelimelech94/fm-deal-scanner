@@ -94,6 +94,23 @@ export function placeOn(img: Pixels, w: number, h: number, x: number, y: number,
   return { data: out, width: w, height: h };
 }
 
+/**
+ * The text in a rectangle lightened towards white, the way the game greys out a listing that sold. Only pixels
+ * darker than the cell are touched, so the cell keeps its colour. 0.4 to 0.48 of the way still reads (tried with
+ * the real reader on shop-list.png at half size); much more and the price misreads.
+ */
+export function fadeText(img: Pixels, r: { x: number; y: number; w: number; h: number }, k = 0.44): Pixels {
+  const out = new Uint8ClampedArray(img.data);
+  for (let y = r.y; y < r.y + r.h; y++) {
+    for (let x = r.x; x < r.x + r.w; x++) {
+      const i = (y * img.width + x) * 4;
+      if (Math.max(out[i]!, out[i + 1]!, out[i + 2]!) >= 200) continue;
+      for (let c = 0; c < 3; c++) out[i + c] = out[i + c]! + (255 - out[i + c]!) * k;
+    }
+  }
+  return { data: out, width: img.width, height: img.height };
+}
+
 /** What the browser adapter hands the finders: the frame shrunk to at most `width` pixels wide. */
 export function examine(frame: Pixels, width: number): Scaled {
   const s = Math.min(1, width / frame.width);

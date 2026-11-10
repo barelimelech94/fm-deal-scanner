@@ -314,7 +314,7 @@ export class ScanController<F, I> {
     if (this.mode === 'inventory') {
       return this.d.collector.scanning
         ? { state: 'watching', html: '<b>Scanning your items.</b> Point at items in the game and they are added.' }
-        : { state: 'idle', html: '<b>Not scanning your items.</b> Press Start scanning hovers in Inventory.' };
+        : { state: 'idle', html: '<b>Not scanning your items.</b> Press Scan my items.' };
     }
     if (this.needsShopArea) return { state: 'busy', html: '<b>Mark the shop area</b> in Settings so the scanner knows where to read.' };
     const s = this.d.session;

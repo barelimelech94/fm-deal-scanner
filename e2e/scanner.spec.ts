@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { loadPng, placeOn, scaleBy } from '../tests/helpers/image';
+import { fadeText, loadPng, placeOn, scaleBy } from '../tests/helpers/image';
 import type { Pixels } from '../src/vision/pixels';
 import { HOVER_ITEMS, hoverId } from '../tests/helpers/hover';
 
@@ -69,6 +69,39 @@ async function loadShot(page: Page, file: ReturnType<typeof screenFile>) {
   await page.waitForFunction((n) => Number(document.body.dataset.scans ?? 0) > n, before, { timeout: 90_000 });
 }
 
+/**
+ * Start capture shares a canvas the test draws on, in place of the screen. `show` puts a screen-sized picture on
+ * it, and the share sends it on as a new frame, as a screen does when the game changes.
+ */
+async function shareCanvas(page: Page): Promise<(file: ReturnType<typeof screenFile>) => Promise<void>> {
+  await page.addInitScript(() => {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 1440, height: 900 });
+    (window as unknown as { shared: HTMLCanvasElement }).shared = canvas;
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const stream = canvas.captureStream(5), ctx = canvas.getContext('2d')!;
+      // an empty desktop to begin with: a share starts with a frame
+      ctx.fillStyle = 'rgb(52, 70, 48)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return stream;
+    };
+  });
+  return (file) => page.evaluate(async (png) => {
+    const picture = await createImageBitmap(new Blob([Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0))], { type: 'image/png' }));
+    (window as unknown as { shared: HTMLCanvasElement }).shared.getContext('2d')!.drawImage(picture, 0, 0);
+  }, file.buffer.toString('base64'));
+}
+
+/** Counts the text reader's passes from now on. */
+async function countPasses(page: Page): Promise<() => Promise<number>> {
+  await page.evaluate(() => {
+    const w = window as unknown as { FM: { reader: { recognize(img: unknown): Promise<unknown> } }; passes: number };
+    const read = w.FM.reader.recognize.bind(w.FM.reader);
+    w.passes = 0;
+    w.FM.reader.recognize = (img) => { w.passes++; return read(img); };
+  });
+  return () => page.evaluate(() => (window as unknown as { passes: number }).passes);
+}
+
 const shopNames = (page: Page) => page.locator('#shopTable tbody .nm-n').allTextContents();
 
 /** Opens a view by its tab in the bar. */
@@ -105,6 +138,35 @@ test('reads a shop from a screenshot and flags the deal', async ({ page }) => {
   // the sighting is in the price book
   await view(page, 'prices');
   await expect(page.locator('#bookTable tbody')).toContainText('Dark Guardian');
+  expect(errors).toEqual([]);
+});
+
+test('takes a listing that sells while the shop is open out of the table, and keeps its Sold twin', async ({ page }) => {
+  const show = await shareCanvas(page);
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  const list = loadPng('shop-list.png');
+  const screen = (shop: Pixels) => screenFile('screen.png', placeOn(scaleBy(shop, 0.5), 1440, 900, 400, 200));
+  await page.click('#btnStart');
+  await expect(page.locator('#statusText')).toContainText('Watching for shops');
+  await show(screen(list));
+  await expect(page.locator('#statusText')).toContainText('Shop open, 6 listings');
+  const guardian = page.locator('#shopTable tbody tr', { hasText: 'Dark Guardian' });
+  await expect(guardian.locator('.chip')).toHaveText('Deal');
+
+  // someone buys the Dark Guardian: the game greys its row, and the live listing leaves the table for its Sold twin.
+  // One row going grey changes too little of the screen for the scanner to read it again by itself (in the game the
+  // next change on screen does), so a check that reads it anyway is asked for once the frame is in.
+  type Fm = { FM: { capture: { framesIn: number }; controller: { tick(force: boolean): Promise<void> } } };
+  const frames = await page.evaluate(() => (window as unknown as Fm).FM.capture.framesIn);
+  await show(screen(fadeText(list, { x: 118, y: 18, w: 410, h: 90 })));
+  await expect.poll(() => page.evaluate(() => (window as unknown as Fm).FM.capture.framesIn)).toBeGreaterThan(frames);
+  await page.evaluate(() => (window as unknown as Fm).FM.controller.tick(true));
+  await expect(guardian.locator('.chip')).toHaveText('Sold');
+  await expect(guardian).toHaveCount(1);
+  await expect(page.locator('#shopTable tbody tr.v-deal')).toHaveCount(0);
+  // the deal it was stays in the log
+  await expect(page.locator('#dealList li', { hasText: 'Dark Guardian' })).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 
@@ -378,6 +440,27 @@ test('adds the items you hover to your inventory, and only while scanning', asyn
   await expect(page.locator('#apScan')).toHaveText('Scan my items');
   await view(page, 'settings');
   await expect(page.locator('#set-appraisalArea')).toHaveValue('any');
+  expect(errors).toEqual([]);
+});
+
+test('reads an item you hover in Inventory once, and shows none of it in Deals', async ({ page }) => {
+  test.setTimeout(180_000);
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(HOVER_TRACKER) });
+  await view(page, 'inventory');
+  const passes = await countPasses(page);
+  await loadShot(page, screenFile('hover.png', placeOn(loadPng('appraisal/trade-equip.png'), 1440, 900, 100, 100)));
+  expect(await passes()).toBe(0);   // not scanning: nothing is read
+  await page.click('#apScan');
+  await expect(page.locator('#apBody tr')).toHaveCount(1);
+  expect(await passes()).toBe(1);
+  await tenChecks(page);
+  expect(await passes()).toBe(1);   // still on screen: not read again
+  // the open shop in Deals knows nothing of it: no shop, no hovered item
+  expect(await page.evaluate(() => {
+    const s = (window as unknown as { FM: { session: { open: boolean; hover: unknown } } }).FM.session;
+    return { open: s.open, hover: s.hover };
+  })).toEqual({ open: false, hover: null });
   expect(errors).toEqual([]);
 });
 
@@ -693,6 +776,29 @@ test('starts capture from Get started, and offers to mark the shop area when non
   await page.click('#btnStop');
   await expect(help).toBeHidden();
   await expect(steps.nth(1)).not.toHaveClass(/done/);
+  expect(errors).toEqual([]);
+});
+
+test('shows Inventory its own Get started steps, until there is an item', async ({ page }) => {
+  const { errors } = await open(page);
+  await view(page, 'inventory');
+  const card = page.locator('#invSetup'), steps = card.locator('li');
+  await expect(card).toBeVisible();
+  await expect(steps.locator('.what')).toHaveText(['Load market prices', 'Start capture', 'Press Scan my items and point at your items']);
+  await card.getByRole('button', { name: 'Go to Prices' }).click();
+  await expect(page.locator('#view-prices')).toBeVisible();
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await view(page, 'inventory');
+  await expect(steps.nth(0)).toHaveClass(/done/);
+  await expect(page.locator('#invSetup li.done')).toHaveCount(1);
+  // an item, here added by name: under way, and the card goes, also after a reload
+  await page.click('#apAddOpen');
+  await page.fill('#apAdd', 'Lemona');
+  await page.click('#apAddBtn');
+  await expect(card).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#apBody tr')).toHaveCount(1);
+  await expect(card).toBeHidden();
   expect(errors).toEqual([]);
 });
 

@@ -319,10 +319,6 @@ details.more > * + * { margin-top: 8px; }
 details.trouble { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
 details.trouble > summary { cursor: pointer; font-weight: 700; font-size: .9rem; color: var(--muted); }
 details.trouble[open] > summary { margin-bottom: 8px; }
-.field { display: grid; gap: 4px; font-size: .88rem; align-content: start; }
-.field > span { font-weight: 700; }
-.field input, .field select { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
-.field > span em { font-style: normal; font-weight: 400; color: var(--muted); }
 
 /* Prices */
 textarea { width: 100%; min-height: 92px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); font: .86rem/1.5 var(--f-body); resize: vertical; }

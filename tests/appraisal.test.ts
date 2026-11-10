@@ -3,6 +3,7 @@ import { appraise, appraiseEntry, listPrice, needsCount, storeTotal } from '../s
 import { addEntry, cleanEntries, clampQty, entryFor, MAX_QTY, parseAppraisalLines } from '../src/appraisal/entries';
 import { offerText, storePricesText } from '../src/appraisal/quote';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type TooltipRead } from '../src/lib/types';
+import { sanitizeSettings } from '../src/settings/schema';
 import { Storage } from '../src/store/storage';
 import { InventoryView } from '../src/ui/inventoryView';
 import { engine, FACTS, ITEMS, NOW } from './helpers/market';
@@ -325,11 +326,12 @@ describe('InventoryView', () => {
 
 describe('the order of your items', () => {
   it('is the order they were added in, whatever an old version saved', () => {
-    const en = engine({ settings: { appraisalSort: 'total', appraisalSortDir: -1 } });
+    // an old version's order for your items is dropped on load, and the rest of its settings load
+    const old = sanitizeSettings({ appraisalSort: 'total', appraisalSortDir: -1, bulkOffer: 90 });
+    expect(old).toEqual({ ...DEFAULT_SETTINGS, bulkOffer: 90 });
+    const en = engine({ settings: old });
     const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, ...VIEW_DEPS });
     p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);
     expect(p.result().lines.map((l) => l.name)).toEqual(['Lemona', 'Gloves Attack Scroll: Greater']);
-    // the old setting still loads, so the rest of an old file does
-    expect(DEFAULT_SETTINGS).toMatchObject({ appraisalSort: 'added', appraisalSortDir: 1 });
   });
 });
