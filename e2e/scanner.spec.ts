@@ -531,9 +531,15 @@ test('keeps a setting within its limits as it is typed, and in step wherever it 
     await page.press(`#set-${key}`, 'Tab');
     await expect(page.locator(`#set-${key}`)).toHaveValue(kept);
   }
+  // a number box takes what the browser hands over, a leading dot or three decimals too
+  for (const [key, typed, kept] of [['interval', '.5', '0.5'], ['statPct', '0.500', '0.5']] as const) {
+    await page.fill(`#set-${key}`, typed);
+    await page.press(`#set-${key}`, 'Tab');
+    await expect(page.locator(`#set-${key}`)).toHaveValue(kept);
+  }
   await page.reload();
   await expect(page.locator('#set-discount')).toHaveValue('5');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 5, fee: 20, interval: 0.4 });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 5, fee: 20, interval: 0.5, statPct: 0.5 });
 
   // the offer is shown in Settings and in Inventory: a change in one shows in the other
   await page.fill('#set-bulkOffer', '80');

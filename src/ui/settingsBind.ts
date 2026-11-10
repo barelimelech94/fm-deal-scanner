@@ -18,11 +18,16 @@ export function parseTypedNumber(raw: string): number | null {
 }
 
 /**
- * What a control holds, as the setting's value: a number for a number box (see `parseTypedNumber`), the option for
- * a list or a switch. Undefined when it holds nothing usable, such as an empty box. Limits are not applied here.
+ * What a control holds, as the setting's value: the option for a list or a switch, and for a number, what the box
+ * says. A text box (`textBox`) is read strictly (`parseTypedNumber`); a number input's value was already checked by
+ * the browser, so it is read as the plain number it is (".5", "0.125", "1e3"). Undefined when it holds nothing
+ * usable, such as an empty box. Limits are not applied here.
  */
-export function parseInput(def: SettingDef, raw: string, checked: boolean): SettingValue | undefined {
-  if (def.kind === 'number') return parseTypedNumber(raw) ?? undefined;
+export function parseInput(def: SettingDef, raw: string, checked: boolean, textBox = false): SettingValue | undefined {
+  if (def.kind === 'number') {
+    const v = textBox ? parseTypedNumber(raw) : raw.trim() === '' ? null : Number(raw);
+    return v != null && Number.isFinite(v) ? v : undefined;
+  }
   if (def.kind === 'toggle') return def.options![checked ? 0 : 1]!.value;
   return def.options!.find((o) => String(o.value) === raw)?.value;
 }
@@ -83,7 +88,7 @@ export class SettingsBinder {
 
   private take(key: keyof Settings, el: Control): void {
     const on = isButton(el) ? el.getAttribute('aria-pressed') !== 'true' : el instanceof HTMLInputElement && el.checked;
-    const v = parseInput(settingOf(key), el.value, on);
+    const v = parseInput(settingOf(key), el.value, on, isTextBox(el));
     const was = this.settings[key];
     if (v !== undefined) (this.settings as unknown as Record<string, unknown>)[key] = sanitizeValue(key, v);
     this.show(key);

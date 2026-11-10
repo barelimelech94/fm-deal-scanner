@@ -70,24 +70,24 @@ describe('the capture details in Troubleshooting', () => {
 });
 
 describe('the settings binder', () => {
-  it('reads a number box, commas and all, and nothing from an empty one', () => {
-    expect(parseInput(settingOf('minProfit'), '12,500', false)).toBe(12500);
-    expect(parseInput(settingOf('minProfit'), '1,250,000', false)).toBe(1_250_000);
-    expect(parseInput(settingOf('fee'), ' 2.5 ', false)).toBe(2.5);
-    expect(parseInput(settingOf('minProfit'), '0', false)).toBe(0);
-    expect(parseInput(settingOf('storeAdjust'), '-10', false)).toBe(-10);
-    expect(parseInput(settingOf('fee'), '', false)).toBeUndefined();
+  it('reads a text box, commas and all, and nothing from an empty one', () => {
+    expect(parseInput(settingOf('minProfit'), '12,500', false, true)).toBe(12500);
+    expect(parseInput(settingOf('minProfit'), '1,250,000', false, true)).toBe(1_250_000);
+    expect(parseInput(settingOf('fee'), ' 2.5 ', false, true)).toBe(2.5);
+    expect(parseInput(settingOf('minProfit'), '0', false, true)).toBe(0);
+    expect(parseInput(settingOf('storeAdjust'), '-10', false, true)).toBe(-10);
+    expect(parseInput(settingOf('fee'), '', false, true)).toBeUndefined();
   });
 
   it('reads mesos written the short way: 5k, 1.5m', () => {
-    expect(parseInput(settingOf('minProfit'), '5k', false)).toBe(5000);
-    expect(parseInput(settingOf('minProfit'), ' 1.5M ', false)).toBe(1_500_000);
-    expect(parseInput(settingOf('minProfit'), '2,500k', false)).toBe(2_500_000);
+    expect(parseInput(settingOf('minProfit'), '5k', false, true)).toBe(5000);
+    expect(parseInput(settingOf('minProfit'), ' 1.5M ', false, true)).toBe(1_500_000);
+    expect(parseInput(settingOf('minProfit'), '2,500k', false, true)).toBe(2_500_000);
   });
 
   it('reads nothing from a number it cannot be sure of', () => {
     for (const raw of ['12 500', '2,5', '3.000', '3.000k x', 'abc', '1,25', '12,5000', '--5', '5kk', '.5', '5.']) {
-      expect(parseInput(settingOf('minProfit'), raw, false), raw).toBeUndefined();
+      expect(parseInput(settingOf('minProfit'), raw, false, true), raw).toBeUndefined();
     }
   });
 
@@ -151,6 +151,22 @@ describe('the settings binder', () => {
     type('#f', '2,5');
     expect([settings.fee, val('#f')]).toEqual([20, '20']);
     expect(changed).toEqual(['minProfit', 'fee']);
+  });
+
+  it('reads a number input as the plain number the browser hands over, and applies the limits', () => {
+    const { settings, changed, type, val } = bound('<input type="number" id="i" data-setting="interval"><input type="number" id="s" data-setting="statPct"><input type="number" id="p" data-setting="minProfit">');
+    type('#i', '.5');
+    expect(settings.interval).toBe(0.5);
+    type('#i', '0.125');
+    expect(settings.interval).toBe(0.4);   // below the limit
+    type('#s', '0.500');
+    expect(settings.statPct).toBe(0.5);
+    type('#p', '1e3');
+    expect(settings.minProfit).toBe(1000);
+    // empty is refused: the setting stays, and the box shows it again
+    type('#p', '');
+    expect([settings.minProfit, val('#p')]).toEqual([1000, '1000']);
+    expect(changed).toEqual(['interval', 'interval', 'statPct', 'minProfit']);
   });
 
   it('puts the value back when what was typed is not a number, and tells of no change', () => {
