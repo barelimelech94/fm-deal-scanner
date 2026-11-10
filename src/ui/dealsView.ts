@@ -13,8 +13,8 @@ export interface DealsDeps {
   /** icon addresses that failed to load */
   failed: ReadonlySet<string>;
   saveSettings(): void;
-  /** the shop's order changed: the overlay follows it */
-  sorted(): void;
+  /** the shop's order or its deals changed here: the overlay, which shows them too, follows */
+  overlay(): void;
   /** whether the view is the one shown */
   shown(): boolean;
   /** changes when the shop or anything that prices it changed */
@@ -40,11 +40,11 @@ export class DealsView {
     this.settings.shopSortDir = s.dir;
     this.d.saveSettings();
     this.render(true);
-    this.d.sorted();
+    this.d.overlay();
   }
 
   wire(): void {
-    $('btnClearDeals').addEventListener('click', () => { this.d.session.clearDeals(); this.render(); });
+    $('btnClearDeals').addEventListener('click', () => { this.d.session.clearDeals(); this.render(); this.d.overlay(); });
     // click a column to order by it, again to flip; the choice is kept for the next shop
     for (const th of document.querySelectorAll<HTMLElement>('#shopTable th.sortable')) {
       const pick = () => this.setSort(nextSort(this.sort(), th.dataset.col as ShopSort['col']));

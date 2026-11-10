@@ -84,7 +84,7 @@ export class App {
 
     const shopAndData = () => `${this.session.version}|${this.data}`;
     this.deals = new DealsView({
-      engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), sorted: () => this.renderOverlay(),
+      engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), overlay: () => this.renderOverlay(),
       shown: shown('deals'), version: shopAndData,
     });
     this.prices = new PricesView({

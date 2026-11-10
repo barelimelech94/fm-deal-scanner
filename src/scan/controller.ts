@@ -80,6 +80,11 @@ export class ScanController<F, I> {
   /** the check under way, if one is, and a forced one asked for while it runs */
   private running: Promise<void> | null = null;
   private next: Promise<void> | null = null;
+  /**
+   * Rises whenever what a check reads for is reset: the mode changed, scanning was paused, capture stopped, a new
+   * screenshot was picked. A check that ends in another generation than it began in is dropped.
+   */
+  private generation = 0;
   private loading = false;
   /** a screenshot picked with "Test with a screenshot", read instead of the share */
   private still: F | null = null;
@@ -107,7 +112,7 @@ export class ScanController<F, I> {
 
   /** Tells the listeners when the status line's words or state changed. */
   private statusChanged(): void {
-    const s = this.status(), key = `${s.state}|${s.html}|${this.error ?? ''}`;
+    const s = this.status(), key = `${s.state}|${s.html}|${this.error ?? ''}|${this.capturing}`;
     if (key === this.shown) return;
     this.shown = key;
     this.emit({ kind: 'status' });
@@ -119,6 +124,7 @@ export class ScanController<F, I> {
    */
   setMode(mode: ScanMode): void {
     if (mode === this.mode) return;
+    this.generation++;
     this.d.engine.settings.mode = mode;
     if (mode === 'inventory') {
       this.d.session.close();
@@ -137,6 +143,7 @@ export class ScanController<F, I> {
     const c = this.d.collector;
     if (on && !this.canScan) return false;
     if (c.scanning === on) return on;
+    if (!on) this.generation++;
     c.scanning = on;
     c.noTooltip();
     this.emit({ kind: 'hover', event: null });
@@ -186,6 +193,7 @@ export class ScanController<F, I> {
   }
 
   stopCapture(): void {
+    this.generation++;
     this.setScanning(false);
     this.ticker.stop();
     this.d.capture.stop();
@@ -202,6 +210,7 @@ export class ScanController<F, I> {
   /** Reads a screenshot instead of the share. Returns false when it could not be read: no reader, or no shop area marked. */
   async useStill(frame: F): Promise<boolean> {
     await this.running;   // a check of the picture before ends first
+    this.generation++;    // and one asked for meanwhile, which would read the picture before, is dropped
     this.still = frame;
     this.d.shop.reset();
     this.d.session.close();
@@ -243,7 +252,7 @@ export class ScanController<F, I> {
 
   private async check(force: boolean): Promise<void> {
     const { session, collector, shop, hovers, engine } = this.d;
-    const mode = this.mode, live = !this.still;
+    const mode = this.mode, live = !this.still, generation = this.generation;
     const shopV = session.version, hoverV = collector.version;
     let event: HoverEvent | null = null;
     let list, tip;
@@ -258,8 +267,8 @@ export class ScanController<F, I> {
         }
       } finally { g.done(); }
     } catch (e) { console.error(e); return; }
-    // a check that ends after the mode changed is dropped: what it read is for the mode before
-    const keep = () => this.mode === mode;
+    // a check that ends after a reset (see `generation`) is dropped: what it read is for what was there before
+    const keep = () => this.generation === generation;
     if (list) { try { await shop.read(list, keep); } catch (e) { console.error(e); } }
     if (tip) { try { event = await hovers.read(tip, keep); } catch (e) { console.error(e); } }
     if (!keep()) return;

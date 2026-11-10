@@ -225,6 +225,54 @@ describe('ScanController', () => {
       expect(changes).not.toContain('shop');
     });
 
+    it('drops a hover read that ends after scanning was paused', async () => {
+      const { c, data, reads, answer, hold } = setup();
+      answer(SCROLL_LINES);
+      c.setMode('inventory');
+      await c.useStill(SCROLL);
+      const release = hold();
+      c.setScanning(true);
+      await vi.waitFor(() => expect(reads()).toBe(1));
+      c.setScanning(false);
+      release();
+      await c.tick();
+      expect(data.entries).toEqual([]);
+    });
+
+    it('drops a shop read that ends after capture stopped', async () => {
+      const { c, session, reads, hold } = setup();
+      await c.startCapture();
+      await c.tick(true);
+      await c.tick(true);   // a live share wants two reads to agree
+      expect(session.open).toBe(true);
+      const n = reads(), release = hold();
+      const reading = c.tick(true);
+      await vi.waitFor(() => expect(reads()).toBe(n + 1));
+      c.stopCapture();
+      const v = session.version;
+      release();
+      await reading;
+      expect(session.open).toBe(false);
+      expect(session.rows.size).toBe(0);
+      expect(session.version).toBe(v);
+      expect(session.recheck).toBe(false);   // nothing from it waits for a second read either
+    });
+
+    it('drops a read of the screenshot before once a new one is picked', async () => {
+      const { c, session, reads, hold } = setup();
+      await c.useStill(SHOP);
+      const n = reads(), release = hold();
+      const reading = c.tick(true);   // the old screenshot, waiting in the reader
+      const queued = c.tick(true);    // and one more of it, asked for meanwhile
+      await vi.waitFor(() => expect(reads()).toBe(n + 1));
+      const picked = c.useStill(SCROLL);   // a screenshot with no shop
+      release();
+      await Promise.all([reading, queued, picked]);
+      await c.tick();
+      expect(session.open).toBe(false);
+      expect(session.rows.size).toBe(0);
+    });
+
     it('does nothing when the mode is the same', async () => {
       const { c, changes } = setup();
       c.setMode('deals');
@@ -303,6 +351,17 @@ describe('ScanController', () => {
       c.stopCapture();
       expect(ticker.stopped).toBe(1);
       expect(c.status().html).toContain('Not capturing');
+    });
+
+    it('tells the status changed when capture starts, even with the same words', async () => {
+      const { c, changes, hold } = setup();
+      await c.useStill(SHOP);
+      const before = c.status();
+      changes.length = 0;
+      hold();   // the first check of the share waits in the reader, so the words stay as they are
+      await c.startCapture();
+      expect(c.status()).toEqual(before);
+      expect(changes).toContain('status');
     });
 
     it('says why a capture did not start', async () => {
