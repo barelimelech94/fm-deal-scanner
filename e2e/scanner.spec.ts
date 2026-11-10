@@ -526,6 +526,53 @@ test('keeps a setting within its limits as it is typed, and in step wherever it 
   expect(errors).toEqual([]);
 });
 
+/** How many changes the page's views take while `act` runs: nodes and text written, not attributes. */
+async function rewrites(page: Page, act: () => Promise<unknown>): Promise<string[]> {
+  await page.evaluate(() => {
+    const w = window as unknown as { seen: string[]; obs: MutationObserver };
+    w.seen = [];
+    w.obs = new MutationObserver((list) => { for (const m of list) w.seen.push((m.target as Element).id || (m.target.parentElement?.closest('[id]')?.id ?? '?')); });
+    w.obs.observe(document.querySelector('main')!, { childList: true, subtree: true, characterData: true });
+  });
+  await act();
+  return page.evaluate(() => { const w = window as unknown as { seen: string[]; obs: MutationObserver }; w.obs.disconnect(); return w.seen; });
+}
+
+/** Ten checks of the screen, as the ticker makes them. */
+const tenChecks = (page: Page) => page.evaluate(async () => {
+  const fm = (window as unknown as { FM: { controller: { tick(): Promise<void> } } }).FM;
+  for (let i = 0; i < 10; i++) await fm.controller.tick();
+});
+
+test('an unchanged screen rewrites nothing, and the price book is kept even when the page goes at once', async ({ page }) => {
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
+  await expect(page.locator('#shopTable tbody tr')).toHaveCount(6);
+  const scans = Number(await page.evaluate(() => document.body.dataset.scans));
+  expect(await rewrites(page, () => tenChecks(page))).toEqual([]);
+  expect(Number(await page.evaluate(() => document.body.dataset.scans))).toBe(scans + 10);
+  // what does change is written: clearing the deals empties their list
+  expect(await rewrites(page, () => page.click('#btnClearDeals'))).toContain('dealList');
+
+  // your items, while scanning a tooltip already counted
+  await view(page, 'inventory');
+  await loadShot(page, screenFile('hover.png', placeOn(loadPng('appraisal/trade-equip.png'), 1440, 900, 100, 100)));
+  await page.click('#apScan');
+  await expect(page.locator('#apBody tr')).toHaveCount(1);
+  expect(await rewrites(page, () => tenChecks(page))).toEqual([]);
+
+  // the sightings were saved a moment after they were read; a reload straight away keeps them too
+  await view(page, 'deals');
+  await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-selected-row.png'), 0.5), 1440, 900, 400, 200)));
+  await expect(page.locator('#shopTable tbody tr')).toHaveCount(1);
+  await page.reload();
+  await view(page, 'prices');
+  await expect(page.locator('#bookTable tbody')).toContainText('Wolbi Throwing Stars');
+  await expect(page.locator('#bookTable tbody')).toContainText('Dark Guardian');
+  expect(errors).toEqual([]);
+});
+
 test('reads shops at every game and screen size', async ({ page }) => {
   test.setTimeout(600_000);
   await open(page);

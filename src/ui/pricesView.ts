@@ -6,6 +6,7 @@ import { resolveKey } from '../market/matching';
 import { parseTrackerPage } from '../market/parseTrackerPage';
 import { fixSetSightings, mergeIntoMarket, newItem } from '../pricing/priceBook';
 import { $, onFile } from './dom';
+import { DrawGate, setHidden, setHtml, setText } from './render';
 import { bookRowHtml, bookRows, marketInfo, parsePriceLines, type BookSort } from './views';
 
 const BOOK_MAX = 250;
@@ -27,22 +28,27 @@ export interface PricesDeps {
   setMarket(m: MarketData): boolean;
   /** a price changed: the shop is judged again and every view redrawn */
   changed(): void;
+  /** whether the view is the one shown */
+  shown(): boolean;
+  /** changes when the price book or the market prices can have changed (sightings come with the shop) */
+  version(): string;
 }
 
 /** The Prices view: the price book with your prices and buy-under targets, the market prices, and your prices pasted in. */
 export class PricesView {
   private sort: BookSort = { col: 'last', dir: -1 };
+  private readonly gate = new DrawGate();
 
   constructor(private readonly d: PricesDeps) {}
 
   wire(): void {
     const e = this.d.engine;
-    $('bookSearch').addEventListener('input', () => this.render());
+    $('bookSearch').addEventListener('input', () => this.render(true));
     for (const th of document.querySelectorAll<HTMLElement>('#bookTable th.sortable')) {
       th.addEventListener('click', () => {
         const col = th.dataset.col as BookSort['col'];
         this.sort = { col, dir: this.sort.col === col ? (-this.sort.dir as 1 | -1) : col === 'name' ? 1 : -1 };
-        this.render();
+        this.render(true);
       });
     }
     $('bookTable').addEventListener('change', (ev) => {
@@ -96,24 +102,26 @@ export class PricesView {
     });
   }
 
-  render(): void {
+  /** Draws the view while it is shown, when the prices changed since it last drew, or when `force`d. */
+  render(force = false): void {
+    if (!this.d.shown() || !this.gate.due(this.d.version(), force)) return;
     const e = this.d.engine;
-    $('marketAge').innerHTML = marketInfo(e.market, e.now());
+    setHtml($('marketAge'), marketInfo(e.market, e.now()));
     // typing in a price box: leave the table alone until the change is made
-    if (document.activeElement instanceof HTMLInputElement && document.activeElement.closest('#bookTable')) return;
+    if (document.activeElement instanceof HTMLInputElement && document.activeElement.closest('#bookTable')) { this.gate.reset(); return; }
     const q = $<HTMLInputElement>('bookSearch').value;
     const all = bookRows(e, q, this.sort), rows = all.slice(0, BOOK_MAX), now = e.now();
-    $<HTMLTableElement>('bookTable').tBodies[0]!.innerHTML = rows.map((r) => bookRowHtml(r, now, this.d.failed)).join('');
+    setHtml($<HTMLTableElement>('bookTable').tBodies[0]!, rows.map((r) => bookRowHtml(r, now, this.d.failed)).join(''));
     const empty = $('bookEmpty');
-    empty.hidden = rows.length > 0;
-    empty.textContent = q.trim() ? 'Nothing matches that name.' : 'Empty. It fills as you open shops, or paste prices below.';
+    setHidden(empty, rows.length > 0);
+    setText(empty, q.trim() ? 'Nothing matches that name.' : 'Empty. It fills as you open shops, or paste prices below.');
     const hint = $('bookHint');
-    hint.textContent = all.length > BOOK_MAX ? `Showing ${BOOK_MAX} of ${fmt(all.length)}. Type more of the name to narrow it.`
-      : !q.trim() && e.market.size ? `Type in the filter to find any of the ${fmt(e.market.size)} items the price tracker lists, and set your own price or buy-under on it.` : '';
-    hint.hidden = !hint.textContent;
+    setText(hint, all.length > BOOK_MAX ? `Showing ${BOOK_MAX} of ${fmt(all.length)}. Type more of the name to narrow it.`
+      : !q.trim() && e.market.size ? `Type in the filter to find any of the ${fmt(e.market.size)} items the price tracker lists, and set your own price or buy-under on it.` : '');
+    setHidden(hint, !hint.textContent);
     for (const th of document.querySelectorAll<HTMLElement>('#bookTable th.sortable')) {
       const on = th.dataset.col === this.sort.col;
-      th.innerHTML = (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${this.sort.dir > 0 ? '▲' : '▼'}</span>` : '');
+      setHtml(th, (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${this.sort.dir > 0 ? '▲' : '▼'}</span>` : ''));
       th.setAttribute('aria-sort', on ? (this.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
     }
   }

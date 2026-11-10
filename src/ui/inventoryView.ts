@@ -8,6 +8,7 @@ import type { AppraisalData, AppraisalEntry, AppraisalSortCol, Region } from '..
 import type { Storage } from '../store/storage';
 import { appraisalRowsHtml, appraisalText, overlayAppraisalHtml } from './appraisalViews';
 import { $ } from './dom';
+import { DrawGate, setHidden, setHtml, setText } from './render';
 
 export interface InventoryDeps {
   engine: Engine;
@@ -17,6 +18,10 @@ export interface InventoryDeps {
   region(): Region | null;
   /** turns scanning your items on or off; false when it can't start, with nothing to scan */
   setScanning(on: boolean): boolean;
+  /** whether the view is the one shown */
+  shown(): boolean;
+  /** changes when anything that prices items changed: settings, market prices, your prices */
+  version(): string;
 }
 
 const CLEAR_LABEL = 'Clear';
@@ -28,6 +33,9 @@ export class InventoryView {
   private clearArmed = 0;
   private hint = '';
   private hintWarn = false;
+  /** rises with every change made here: a line edited, added or removed, the order, the hint */
+  private edits = 0;
+  private readonly gate = new DrawGate();
 
   constructor(private readonly d: InventoryDeps) {
     this.data = d.store.loadAppraisal();
@@ -45,7 +53,8 @@ export class InventoryView {
     this.settings.appraisalSort = s.col;
     this.settings.appraisalSortDir = s.dir;
     this.d.store.saveSettings(this.settings);
-    this.render(true);
+    this.edits++;
+    this.render({ overTyping: true });
   }
 
   /** The appraisal, its lines in the order chosen: the table and the copied list follow it. */
@@ -76,10 +85,10 @@ export class InventoryView {
   /** What the pop-out overlay shows of the appraisal. */
   overlayHtml(): string { return overlayAppraisalHtml(this.result(), this.scanning, this.hint); }
 
-  private save(): void { this.d.store.saveAppraisal(this.data); }
+  private save(): void { this.edits++; this.d.store.saveAppraisal(this.data); }
   private find(id: string | undefined) { return this.data.entries.find((x) => x.id === id); }
 
-  setHint(text: string, warn = false): void { this.hint = text; this.hintWarn = warn; }
+  setHint(text: string, warn = false): void { this.hint = text; this.hintWarn = warn; this.edits++; }
 
   /** Turns scanning on or off. Returns whether it is on: it can't start with nothing to scan. */
   setScanning(on: boolean): boolean {
@@ -101,7 +110,7 @@ export class InventoryView {
   showEvent(ev: HoverEvent): void {
     if (ev.kind === 'added' || ev.kind === 'fixed' || ev.kind === 'undone') this.save();
     this.setHint(ev.text, !!ev.warn);
-    this.render(true);
+    this.render({ overTyping: true });
   }
 
   wire(): void {
@@ -179,44 +188,49 @@ export class InventoryView {
     catch { $('apMsg').textContent = "Couldn't copy. Select the quote text and copy it."; }
   }
 
-  /** `force` draws the table even with a box focused: a hover just changed it. */
-  render(force = false): void {
+  /**
+   * Draws the view while it is shown, when your items, the hovers or the prices changed since it last drew.
+   * `force` draws anyway (it was just shown); `overTyping` draws the table even with a box in it focused (a hover
+   * or a new order just changed it). Only what differs is written.
+   */
+  render(o: { force?: boolean; overTyping?: boolean } = {}): void {
+    if (!this.d.shown() || !this.gate.due(`${this.collector.version}|${this.edits}|${this.d.version()}`, o.force)) return;
     const typing = document.activeElement instanceof HTMLInputElement && document.activeElement.closest('#apTable');
     const r = this.result(), t = appraisalText(r), on = this.scanning;
     const scan = $<HTMLButtonElement>('apScan');
-    scan.textContent = on ? 'Pause scanning' : 'Start scanning hovers';
+    setText(scan, on ? 'Pause scanning' : 'Start scanning hovers');
     scan.classList.toggle('primary', !on);
     scan.setAttribute('aria-pressed', String(on));
-    $('apState').textContent = on ? 'Scanning: point at your items' : 'Paused';
+    setText($('apState'), on ? 'Scanning: point at your items' : 'Paused');
     $('apState').dataset.on = String(on);
     $<HTMLButtonElement>('apUndo').disabled = !this.collector.canUndo;
-    $('apHint').textContent = this.hint;
-    $('apHint').hidden = !this.hint;
+    setText($('apHint'), this.hint);
+    setHidden($('apHint'), !this.hint);
     $('apHint').classList.toggle('bad', this.hintWarn);
     // the order: arrows on the headers, the Order list, and the way back
     const s = this.sort();
     for (const th of document.querySelectorAll<HTMLElement>('#apTable th.sortable')) {
       const on = th.dataset.col === s.col;
-      th.innerHTML = (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${s.dir > 0 ? '▲' : '▼'}</span>` : '');
+      setHtml(th, (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${s.dir > 0 ? '▲' : '▼'}</span>` : ''));
       th.setAttribute('aria-sort', on ? (s.dir > 0 ? 'ascending' : 'descending') : 'none');
     }
     const order = $<HTMLSelectElement>('apOrder'), key = s.col === 'added' ? 'added' : `${s.col}:${s.dir}`;
     order.value = [...order.options].some((o) => o.value === key) ? key : 'custom';
-    $('apSortReset').hidden = s.col === 'added';
+    setHidden($('apSortReset'), s.col === 'added');
     // typing in a box: leave the table alone until the change is made
-    if (typing && !force) return;
-    $('apMeta').textContent = t.meta;
-    $('apBody').innerHTML = appraisalRowsHtml(r, this.d.engine.market, this.d.failed);
-    $('apEmpty').hidden = r.lines.length > 0;
-    $('apTable').hidden = !r.lines.length;
-    $('apTotal').textContent = t.total;
-    $('apRough').textContent = t.rough;
-    $('apWarn').textContent = t.warn;
-    $('apWarn').hidden = !t.warn;
-    $('apOfferLabel').textContent = t.offerLabel;
-    $('apOffer').textContent = t.offer;
-    $('apModeNote').textContent = t.mode;
-    $('apQuote').textContent = quoteShort(r);
+    if (typing && !o.overTyping) { this.gate.reset(); return; }
+    setText($('apMeta'), t.meta);
+    setHtml($('apBody'), appraisalRowsHtml(r, this.d.engine.market, this.d.failed));
+    setHidden($('apEmpty'), r.lines.length > 0);
+    setHidden($('apTable'), !r.lines.length);
+    setText($('apTotal'), t.total);
+    setText($('apRough'), t.rough);
+    setText($('apWarn'), t.warn);
+    setHidden($('apWarn'), !t.warn);
+    setText($('apOfferLabel'), t.offerLabel);
+    setText($('apOffer'), t.offer);
+    setText($('apModeNote'), t.mode);
+    setText($('apQuote'), quoteShort(r));
     for (const id of ['apCopy', 'apCopyFull']) $<HTMLButtonElement>(id).disabled = !r.kinds;
     $<HTMLButtonElement>('apClear').disabled = !this.data.entries.length;
   }

@@ -77,8 +77,9 @@ export class ScanController<F, I> {
   scans = 0;
   /** why capture or the reader failed, as HTML; null when nothing did */
   error: string | null = null;
-  /** the check under way, if one is */
+  /** the check under way, if one is, and a forced one asked for while it runs */
   private running: Promise<void> | null = null;
+  private next: Promise<void> | null = null;
   private loading = false;
   /** a screenshot picked with "Test with a screenshot", read instead of the share */
   private still: F | null = null;
@@ -200,6 +201,7 @@ export class ScanController<F, I> {
 
   /** Reads a screenshot instead of the share. Returns false when it could not be read: no reader, or no shop area marked. */
   async useStill(frame: F): Promise<boolean> {
+    await this.running;   // a check of the picture before ends first
     this.still = frame;
     this.d.shop.reset();
     this.d.session.close();
@@ -226,10 +228,13 @@ export class ScanController<F, I> {
 
   /**
    * One check of the screen, by the mode's reader. `force` reads even if the screen looks unchanged. While a
-   * check is under way, it is that check that is waited for.
+   * check is under way, a plain one waits for it; a forced one runs once it ends (one, however many are asked for).
    */
   tick(force = false): Promise<void> {
-    if (this.running) return this.running;
+    if (this.running) {
+      if (!force) return this.running;
+      return (this.next ??= this.running.then(() => { this.next = null; return this.tick(true); }));
+    }
     if (!this.d.reader.ready || !this.canScan) return Promise.resolve();
     this.running = this.check(force).finally(() => { this.running = null; });
     return this.running;

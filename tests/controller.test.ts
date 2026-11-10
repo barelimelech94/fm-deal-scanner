@@ -197,6 +197,25 @@ describe('ScanController', () => {
       expect(changes.filter((x) => x === 'checked')).toHaveLength(10);
     });
 
+    it('reads a new screenshot even while a check of the one before is under way', async () => {
+      const { c, session, answer } = setup();
+      answer(SCROLL_LINES);
+      await c.useStill(SCROLL);
+      answer(SHOP_LINES);
+      const before = c.tick(true);   // still reading the scroll
+      await c.useStill(SHOP);
+      await before;
+      expect(session.open).toBe(true);
+    });
+
+    it('runs one forced check after the one under way, however many are asked for', async () => {
+      const { c, reads } = setup();
+      await c.useStill(SHOP);
+      const n = reads();
+      await Promise.all([c.tick(true), c.tick(true), c.tick(true), c.tick()]);
+      expect(reads() - n).toBe(2);   // the one under way, and one more
+    });
+
     it('counts every check', async () => {
       const { c } = setup();
       c.setMode('inventory');

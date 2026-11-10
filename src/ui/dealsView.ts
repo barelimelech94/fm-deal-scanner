@@ -2,6 +2,7 @@ import type { Engine } from '../engine';
 import { cap, clock, esc } from '../lib/format';
 import type { DisplayRow, ShopSession } from '../shop/session';
 import { $ } from './dom';
+import { DrawGate, setHidden, setHtml, setText } from './render';
 import {
   cleanSort, dealLine, dealsHtml, freshDeal, hoverText, iconHtml, nextSort, shopMeta, shopRowHtml, sortRows, type ShopSort,
 } from './views';
@@ -14,10 +15,16 @@ export interface DealsDeps {
   saveSettings(): void;
   /** the shop's order changed: the overlay follows it */
   sorted(): void;
+  /** whether the view is the one shown */
+  shown(): boolean;
+  /** changes when the shop or anything that prices it changed */
+  version(): string;
 }
 
 /** The Deals view: the open shop with its deal banner and hovered item, and the deals found this session. */
 export class DealsView {
+  private readonly gate = new DrawGate();
+
   constructor(private readonly d: DealsDeps) {}
 
   private get settings() { return this.d.engine.settings; }
@@ -32,7 +39,7 @@ export class DealsView {
     this.settings.shopSort = s.col;
     this.settings.shopSortDir = s.dir;
     this.d.saveSettings();
-    this.render();
+    this.render(true);
     this.d.sorted();
   }
 
@@ -53,7 +60,12 @@ export class DealsView {
     b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash');
   }
 
-  render(): void {
+  /**
+   * Draws the view while it is shown, when the shop or the prices changed since it last drew. `force` draws
+   * anyway (it was just shown, or time moved on); only what differs is written.
+   */
+  render(force = false): void {
+    if (!this.d.shown() || !this.gate.due(this.d.version(), force)) return;
     this.renderHeaders();
     this.renderShop();
     this.renderDeals();
@@ -66,36 +78,36 @@ export class DealsView {
     const s = this.sort();
     for (const th of document.querySelectorAll<HTMLElement>('#shopTable th.sortable')) {
       const on = th.dataset.col === s.col;
-      th.innerHTML = (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${s.dir > 0 ? '▲' : '▼'}</span>` : '');
+      setHtml(th, (th.textContent ?? '').replace(/[▲▼]/g, '').trim() + (on ? `<span class="arrow">${s.dir > 0 ? '▲' : '▼'}</span>` : ''));
       th.setAttribute('aria-sort', on ? (s.dir > 0 ? 'ascending' : 'descending') : 'none');
     }
-    $('shopSortReset').hidden = s.col === 'best';
+    setHidden($('shopSortReset'), s.col === 'best');
   }
 
   private renderShop(): void {
     const { session, engine } = this.d, m = engine.market;
     const rows = this.rows();
     const table = $<HTMLTableElement>('shopTable');
-    table.tBodies[0]!.innerHTML = rows.map((r) => shopRowHtml(r, m, this.d.failed)).join('');
-    table.hidden = !rows.length;
-    $('shopEmpty').hidden = !!rows.length;
-    $('shopMeta').textContent = shopMeta(session, rows);
+    setHtml(table.tBodies[0]!, rows.map((r) => shopRowHtml(r, m, this.d.failed)).join(''));
+    setHidden(table, !rows.length);
+    setHidden($('shopEmpty'), !!rows.length);
+    setText($('shopMeta'), shopMeta(session, rows));
     const hv = hoverText(session.hover, engine);
-    $('hoverLine').hidden = !hv;
-    if (hv && session.hover) $('hoverLine').innerHTML = `${this.icon(session.hover.key)}<span><b>Hovered</b> ${esc(hv)}</span>`;
+    setHidden($('hoverLine'), !hv);
+    if (hv && session.hover) setHtml($('hoverLine'), `${this.icon(session.hover.key)}<span><b>Hovered</b> ${esc(hv)}</span>`);
     const deal = freshDeal(session, engine.now());
-    $('dealBanner').hidden = !deal;
+    setHidden($('dealBanner'), !deal);
     if (deal) {
       const l = dealLine(deal, m);
-      $('dealLabel').textContent = `Deal at ${clock(deal.ts)}`;
-      $('dealWhat').innerHTML = `${this.icon(deal.key)}<span>${esc(l.name)}</span>`;
-      $('dealMath').textContent = `${cap(l.listing)}, ${l.why}`;
-      $('dealProfit').innerHTML = l.profit ? `${esc(l.profit)}<small>${esc(l.profitNote)}</small>` : '';
+      setText($('dealLabel'), `Deal at ${clock(deal.ts)}`);
+      setHtml($('dealWhat'), `${this.icon(deal.key)}<span>${esc(l.name)}</span>`);
+      setText($('dealMath'), `${cap(l.listing)}, ${l.why}`);
+      setHtml($('dealProfit'), l.profit ? `${esc(l.profit)}<small>${esc(l.profitNote)}</small>` : '');
     }
   }
 
   private renderDeals(): void {
-    $('dealList').innerHTML = dealsHtml(this.d.session.deals, this.d.engine.market, this.d.failed);
-    $('dealsEmpty').hidden = this.d.session.deals.length > 0;
+    setHtml($('dealList'), dealsHtml(this.d.session.deals, this.d.engine.market, this.d.failed));
+    setHidden($('dealsEmpty'), this.d.session.deals.length > 0);
   }
 }

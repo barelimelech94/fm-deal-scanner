@@ -1,6 +1,7 @@
 import type { ScanMode } from '../lib/types';
 import type { ScanStatus } from '../scan/controller';
 import { $ } from './dom';
+import { setHidden, setHtml, setText } from './render';
 
 /** What the capture control shows. */
 export interface CaptureState {
@@ -30,14 +31,13 @@ export class CaptureBar {
     const st = this.s.status(), on = this.s.capturing;
     const pill = $('status'), text = $('statusText');
     pill.dataset.state = st.state;
-    text.innerHTML = st.html;
-    pill.title = text.textContent ?? '';
-    $('captureMode').textContent = this.s.mode === 'inventory' ? 'Inventory' : 'Deals';
-    $('btnStart').hidden = on;
-    $('btnStop').hidden = !on;
+    if (setHtml(text, st.html)) pill.title = text.textContent ?? '';
+    setText($('captureMode'), this.s.mode === 'inventory' ? 'Inventory' : 'Deals');
+    setHidden($('btnStart'), on);
+    setHidden($('btnStop'), !on);
     $<HTMLButtonElement>('btnPip').disabled = !on;
     const err = this.s.error;
-    $('captureError').hidden = !err;
-    if (err) $('captureErrorText').innerHTML = err;
+    setHidden($('captureError'), !err);
+    if (err) setHtml($('captureErrorText'), err);
   }
 }

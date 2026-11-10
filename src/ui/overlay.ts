@@ -1,3 +1,5 @@
+import { setHtml } from './render';
+
 /**
  * A small always-on-top window (Document Picture-in-Picture, Chrome 116+) that shows the open
  * shop over the game.
@@ -33,8 +35,9 @@ export class Overlay {
     return w;
   }
 
+  /** Shows `html`, writing it only when it differs from what the overlay shows. */
   render(html: string): void {
     const root = this.win?.document.getElementById('pipRoot');
-    if (root) root.innerHTML = html;
+    if (root) setHtml(root, html);
   }
 }

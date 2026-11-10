@@ -195,7 +195,7 @@ describe('InventoryView', () => {
     const en = engine();
     Object.assign(en.settings, over);
     const st = new Storage(null);
-    return { en, p: new InventoryView({ engine: en, store: st, failed: new Set(), region: () => null, setScanning: () => false }) };
+    return { en, p: new InventoryView({ engine: en, store: st, failed: new Set(), region: () => null, setScanning: () => false, shown: () => false, version: () => '' }) };
   };
 
   it('starts empty and keeps good settings', () => {
@@ -207,7 +207,7 @@ describe('InventoryView', () => {
   it('counts hovers anywhere, or only near the marked area once one is chosen', () => {
     const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.3 };
     const en = engine(), st = new Storage(null);
-    const p = new InventoryView({ engine: en, store: st, failed: new Set(), region: () => region, setScanning: () => false });
+    const p = new InventoryView({ engine: en, store: st, failed: new Set(), region: () => region, setScanning: () => false, shown: () => false, version: () => '' });
     expect(p.area()).toBeNull();
     en.settings.appraisalArea = 'marked';
     expect(p.area()).toEqual(region);
@@ -298,7 +298,7 @@ describe('ordering the lines', () => {
     const mk = (over: Record<string, unknown>) => {
       const en = engine();
       Object.assign(en.settings, over);
-      const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, setScanning: () => false });
+      const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, setScanning: () => false, shown: () => false, version: () => '' });
       p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);
       return p;
     };

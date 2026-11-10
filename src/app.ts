@@ -4,7 +4,7 @@ import { ScreenCapture } from './capture/screen';
 import { Ticker } from './capture/ticker';
 import type { Engine } from './engine';
 import type { HoverEvent } from './appraisal/hovers';
-import type { MarketData, PriceBook, Region, Settings } from './lib/types';
+import type { MarketData, PriceBook, Region, Settings, ViewName } from './lib/types';
 import { loadCatalog } from './market/catalog';
 import { MarketIndex } from './market/marketIndex';
 import { Reader } from './ocr/reader';
@@ -12,6 +12,7 @@ import { isPriceBook, mergeBackup, pruneOld } from './pricing/priceBook';
 import { ScanController, type ScanChange } from './scan/controller';
 import { Scanner } from './scan/scanner';
 import { ShopSession, type Deal } from './shop/session';
+import { SaveLater } from './store/saveLater';
 import { Storage } from './store/storage';
 import { Calibration, type AreaKind } from './ui/calibrate';
 import { CaptureBar } from './ui/captureBar';
@@ -52,6 +53,10 @@ export class App {
   /** icon addresses that failed to load: show the emoji instead from now on */
   private readonly failedIcons = new Set<string>();
   private wipeArmed = 0;
+  /** rises when anything that prices items changes: a setting, the market prices, your prices, the item pictures */
+  private data = 0;
+  /** the price book is saved a second after its last change */
+  private readonly bookSave: SaveLater;
 
   constructor() {
     const book = this.store.loadBook();
@@ -60,11 +65,14 @@ export class App {
     this.region = this.store.loadRegion();
     this.itemsRegion = this.store.loadItemsRegion();
     const e = this.engine, failed = this.failedIcons;
+    this.bookSave = new SaveLater(() => this.store.saveBook(this.engine.book));
+    const shown = (v: ViewName) => () => this.shell.isShown(v);
 
     this.session = new ShopSession(e, { onDeal: (d) => this.onDeal(d) });
     this.scanner = new Scanner(canvasAdapter, this.reader, this.session, e, { onBook: () => this.saveBook() });
     this.inventory = new InventoryView({
       engine: e, store: this.store, failed, region: () => this.itemsRegion, setScanning: (on) => this.setScanning(on),
+      shown: shown('inventory'), version: () => String(this.data),
     });
     this.controller = new ScanController({
       engine: e, capture: this.capture, reader: this.reader, repeat: (tick) => new Ticker(tick),
@@ -74,9 +82,14 @@ export class App {
     });
     this.controller.on((c) => this.changed(c));
 
-    this.deals = new DealsView({ engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), sorted: () => this.renderOverlay() });
+    const shopAndData = () => `${this.session.version}|${this.data}`;
+    this.deals = new DealsView({
+      engine: e, session: this.session, failed, saveSettings: () => this.saveSettings(), sorted: () => this.renderOverlay(),
+      shown: shown('deals'), version: shopAndData,
+    });
     this.prices = new PricesView({
       engine: e, failed, saveBook: () => this.saveBook(), setMarket: (m) => this.setMarket(m), changed: () => this.pricesChanged(),
+      shown: shown('prices'), version: shopAndData,
     });
     this.settingsView = new SettingsView($('view-settings'), {
       canScan: () => this.controller.canScan,
@@ -84,6 +97,7 @@ export class App {
       markItems: () => void this.calibration.open('items'),
       loadShot: (f) => this.loadScreenshot(f),
       diag: () => this.diag(),
+      seen: () => this.scanner.lastCrop,
     });
     this.binder = new SettingsBinder(e.settings, (key) => this.settingChanged(key));
     this.bar = new CaptureBar(this.controller, {
@@ -93,7 +107,7 @@ export class App {
       dismissError: () => this.controller.dismissError(),
     });
     this.shell = new Shell({
-      settings: e.settings, save: () => this.saveSettings(), setMode: (m) => this.controller.setMode(m), shown: () => this.render(),
+      settings: e.settings, save: () => this.saveSettings(), setMode: (m) => this.controller.setMode(m), shown: () => this.render(true),
     });
     this.calibration = new Calibration({
       grab: () => this.controller.grab(),
@@ -120,10 +134,15 @@ export class App {
     if (fixed) { this.saveBook(); $('dataMsg').textContent = fixed; }
     this.shell.start();
     document.addEventListener('error', (e) => { const t = e.target as Element | null; if (t?.tagName === 'IMG') this.iconFailed(t as HTMLImageElement); }, true);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = 'FM Deal Scanner'; });
-    // times like "opened 3:41 PM" and the banner's 5 minutes move on even when nothing is read
-    setInterval(() => { if (!document.hidden) { this.deals.render(); this.renderOverlay(); } }, 15_000);
-    setInterval(() => this.settingsView.renderDiag(), 1000);
+    // the price book waiting to be saved is saved before the page goes, or goes to the background
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.bookSave.flush();
+      else document.title = 'FM Deal Scanner';
+    });
+    window.addEventListener('pagehide', () => this.bookSave.flush());
+    // the banner's 5 minutes and the hovered item's 90 seconds run out even when nothing is read
+    setInterval(() => { if (!document.hidden) { this.deals.render(true); this.renderOverlay(); } }, 15_000);
+    setInterval(() => { if (this.shell.isShown('settings')) this.settingsView.renderTrouble(); }, 1000);
     void this.loadCatalog();
   }
 
@@ -132,6 +151,7 @@ export class App {
     const catalog = await loadCatalog(`${import.meta.env.BASE_URL}items.json`);
     if (!catalog.size) return;
     this.engine.market = this.engine.market.withCatalog(catalog);
+    this.data++;
     this.render();
   }
 
@@ -142,10 +162,10 @@ export class App {
   private changed(c: ScanChange): void {
     if (c.kind === 'shop') { this.deals.render(); this.prices.render(); }
     else if (c.kind === 'hover') this.hoverChanged(c.event);
-    else if (c.kind === 'status') { this.bar.render(); this.settingsView.render(); }
+    else if (c.kind === 'status') { this.bar.render(); if (this.shell.isShown('settings')) this.settingsView.render(); }
     else {
       document.body.dataset.scans = String(this.controller.scans);
-      if (this.scanner.lastCrop) this.settingsView.drawSeen(this.scanner.lastCrop);
+      if (this.shell.isShown('settings')) this.settingsView.renderTrouble();
       return;
     }
     this.renderOverlay();
@@ -209,13 +229,14 @@ export class App {
     this.pricesChanged();
   }
 
-  /** Something that prices items changed: the shop is judged again, and every view drawn. */
+  /** Something that prices items changed: the shop is judged again, and the view drawn. */
   private pricesChanged(): void {
+    this.data++;
     this.session.reevaluate();
     this.render();
   }
 
-  private saveBook(): void { this.store.saveBook(this.engine.book); }
+  private saveBook(): void { this.bookSave.request(); }
 
   private setMarket(m: MarketData): boolean {
     this.engine.market = new MarketIndex(m, this.engine.market.catalog);
@@ -262,12 +283,13 @@ export class App {
 
   // ---------- drawing ----------
 
-  render(): void {
+  /** Draws the bar, the view shown (each view draws only while shown, when its data changed or `force`d) and the overlay. */
+  render(force = false): void {
     this.bar.render();
-    this.deals.render();
-    this.inventory.render();
-    this.prices.render();
-    this.settingsView.render();
+    this.deals.render(force);
+    this.inventory.render({ force });
+    this.prices.render(force);
+    if (this.shell.isShown('settings')) this.settingsView.render();
     this.renderOverlay();
   }
 

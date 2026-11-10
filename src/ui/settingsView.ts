@@ -2,6 +2,7 @@ import { esc } from '../lib/format';
 import type { Settings } from '../lib/types';
 import { SETTINGS, type SettingDef, type SettingGroup } from '../settings/schema';
 import { $, onFile } from './dom';
+import { setText } from './render';
 
 /** The groups of the Settings view, in order. `state` (what the page remembers) is not shown. */
 export const SETTING_GROUPS: readonly { group: Exclude<SettingGroup, 'state'>; title: string; sub?: string }[] = [
@@ -77,10 +78,17 @@ export interface SettingsViewDeps {
   loadShot(f: File): Promise<void>;
   /** the capture details line; empty while not capturing */
   diag(): string;
+  /** what the scanner read last, for Troubleshooting */
+  seen(): (CanvasImageSource & { width: number; height: number }) | null;
 }
+
+type Picture = CanvasImageSource & { width: number; height: number };
 
 /** The Settings view: the generated groups, the buttons that go with them, and Troubleshooting. */
 export class SettingsView {
+  /** the picture drawn in Troubleshooting */
+  private drawn: Picture | null = null;
+
   constructor(root: HTMLElement, private readonly d: SettingsViewDeps) {
     root.innerHTML = settingsHtml();
   }
@@ -89,23 +97,30 @@ export class SettingsView {
     $('btnMarkShop').addEventListener('click', () => this.d.markShop());
     $('btnMarkItems').addEventListener('click', () => this.d.markItems());
     onFile('fileShot', (f) => this.d.loadShot(f));
+    $('trouble').addEventListener('toggle', () => this.renderTrouble());
   }
 
+  /** The buttons that need something to mark an area on, and Troubleshooting. */
   render(): void {
     const can = this.d.canScan();
-    $<HTMLButtonElement>('btnMarkShop').disabled = !can;
-    $<HTMLButtonElement>('btnMarkItems').disabled = !can;
-    this.renderDiag();
+    for (const id of ['btnMarkShop', 'btnMarkItems']) {
+      const b = $<HTMLButtonElement>(id);
+      if (b.disabled === can) b.disabled = !can;
+    }
+    this.renderTrouble();
   }
 
-  /** The capture details line, while Troubleshooting is open. */
-  renderDiag(): void {
+  /** While Troubleshooting is open: the capture details line, and what the scanner saw last when that is new. */
+  renderTrouble(): void {
     if (!$<HTMLDetailsElement>('trouble').open) return;
-    $('diag').textContent = this.d.diag() || 'Not capturing.';
+    setText($('diag'), this.d.diag() || 'Not capturing.');
+    const src = this.d.seen();
+    if (src && src !== this.drawn) this.drawSeen(src);
   }
 
   /** What the scanner saw last, small. */
-  drawSeen(src: CanvasImageSource & { width: number; height: number }): void {
+  private drawSeen(src: Picture): void {
+    this.drawn = src;
     const c = $<HTMLCanvasElement>('seenCanvas'), ctx = c.getContext('2d');
     if (!ctx) return;
     const r = Math.min(160 / src.width, 120 / src.height);
