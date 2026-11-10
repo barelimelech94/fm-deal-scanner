@@ -178,6 +178,12 @@ export class ScanController<F, I> {
     return true;
   }
 
+  /** The error was read: the bar under the capture control goes. */
+  dismissError(): void {
+    this.error = null;
+    this.statusChanged();
+  }
+
   stopCapture(): void {
     this.setScanning(false);
     this.ticker.stop();

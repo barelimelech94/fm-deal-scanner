@@ -1,5 +1,5 @@
-/* Layout: a trading console. The open shop leads on the left with deals and rules beside it;
-   the price book and data run full width below. One column under 1060px. */
+/* Layout: a slim bar that stays on top, with the tabs and the capture control, then one view at a time.
+   A desktop tool: laid out for 900px and up, two columns from 1060px. */
 :root {
   --bg: #edf2f8;
   --panel: #ffffff;
@@ -47,9 +47,7 @@ html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink);
   font: 15px/1.5 var(--f-body);
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 20px 48px;
+  padding: 0 16px 48px;
 }
 [hidden] { display: none !important; }
 h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.15; text-wrap: balance; }
@@ -59,22 +57,35 @@ h3 { font-size: 1rem; font-weight: 700; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* Header: brand on the left, the capture controls on the right, status under them */
-.top { max-width: 1320px; margin: 0 auto 18px; display: grid; gap: 10px; }
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* The bar: brand, tabs, the capture control, the overlay and the gear. Sticky, so it is always at hand. */
+.top {
+  position: sticky; top: 0; z-index: 20; margin: 0 -16px 18px; padding: 0 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.bar { max-width: 1320px; margin: 0 auto; display: flex; align-items: center; gap: 8px 18px; min-height: 58px; }
+.brand { display: flex; align-items: center; gap: 10px; flex: none; }
 .coin {
-  width: 38px; height: 38px; border-radius: 50%; flex: none;
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
   background: radial-gradient(circle at 35% 30%, #ffe6a1 0 18%, #f2b72f 38%, #b97c06 100%);
   box-shadow: inset 0 -2px 0 rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.4);
-  display: grid; place-items: center; color: #6a4500; font: 800 16px/1 var(--f-display);
+  display: grid; place-items: center; color: #6a4500; font: 800 13px/1 var(--f-display);
 }
-.brand h1 { font-size: 1.75rem; font-weight: 800; }
-.brand p { margin: 0; color: var(--muted); font-size: .88rem; }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.brand h1 { font-size: 1.3rem; font-weight: 800; white-space: nowrap; }
+.tabs { display: flex; gap: 2px; align-self: stretch; }
+.tab {
+  border: 0; background: none; cursor: pointer; padding: 0 14px; font: 700 .95rem/1 var(--f-display); color: var(--muted);
+  border-bottom: 3px solid transparent; margin-bottom: -1px; align-self: stretch;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline-offset: -4px; border-radius: 6px; }
+.tab.gear { font-size: 1.25rem; padding: 0 10px; flex: none; }
+.capture { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
+.modechip { flex: none; font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .btn {
   border: 1px solid var(--line); background: var(--panel); border-radius: 9px;
-  padding: 8px 14px; cursor: pointer; font-weight: 700; font-size: .92rem; line-height: 1.3;
+  padding: 7px 14px; cursor: pointer; font-weight: 700; font-size: .9rem; line-height: 1.3; white-space: nowrap;
 }
 .btn:hover:not(:disabled) { border-color: var(--muted); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -83,41 +94,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
 .btn.ghost:hover:not(:disabled) { color: var(--ink); border-color: var(--line); }
 .btn.small { padding: 4px 10px; font-size: .82rem; }
-.toggle { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: .9rem; padding: 0 4px; cursor: pointer; color: var(--muted); }
-.filebtn { position: relative; overflow: hidden; }
+.filebtn { position: relative; overflow: hidden; display: inline-block; }
 .filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.statusrow { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
 .status {
-  display: inline-flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 46ch;
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
-  padding: 5px 12px 5px 10px; font-size: .88rem; color: var(--muted);
+  padding: 5px 12px 5px 10px; font-size: .86rem; color: var(--muted);
 }
+.status #statusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--sold); flex: none; }
 .status[data-state="watching"] .dot { background: var(--new); }
 .status[data-state="shop"] .dot { background: var(--deal); box-shadow: 0 0 0 3px var(--deal-bg); }
-.status[data-state="error"] .dot { background: var(--high); }
 .status[data-state="busy"] .dot { background: var(--accent); }
 .status b { color: var(--ink); font-weight: 700; }
-.diag { font: .76rem/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); }
+.errorbar {
+  max-width: 1320px; margin: 0 auto 10px; display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 12px; border-radius: 10px; background: var(--high-bg); color: var(--ink); font-size: .88rem;
+  border: 1px solid var(--high);
+}
+.errorbar > span { flex: 1; }
+.diag { margin: 0; font: .76rem/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); }
 
-/* Page grid: the open shop leads; deals and rules sit beside it; the price book and data run full width */
-.grid {
-  max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; align-items: start;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  grid-template-areas: "shop side" "appr appr" "book book" "data data";
+/* Views: one main card, quieter cards beside it from 1060px */
+main { max-width: 1320px; margin: 0 auto; }
+.view { display: grid; gap: 16px; align-items: start; }
+.view:focus { outline: none; }
+@media (min-width: 1060px) {
+  .view.two { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  /* Settings: the cards flow down two columns, so short ones leave no gaps */
+  .view.cols { display: block; columns: 2; column-gap: 16px; }
 }
-.a-shop { grid-area: shop; } .a-side { grid-area: side; } .a-appr { grid-area: appr; } .a-book { grid-area: book; } .a-data { grid-area: data; }
+.view.cols > * { break-inside: avoid; margin-bottom: 16px; }
 .side { display: grid; gap: 16px; align-content: start; min-width: 0; }
-@media (max-width: 1060px) {
-  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "shop" "side" "appr" "book" "data"; }
-}
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
 .panel.lead { box-shadow: var(--shadow); }
 .panel.quiet { background: var(--panel-q); }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; padding: 14px 18px 10px; }
 .panel-head .meta { color: var(--muted); font-size: .86rem; }
 .panel-body { padding: 0 18px 18px; }
+.panel-body.stack { display: grid; gap: 8px; }
+.panel-body.stack p { margin: 0; }
 .empty { color: var(--muted); font-size: .92rem; margin: 8px 0 2px; }
+.panel-body > .note + .note, .booktable + .empty + .note { margin-top: 8px; }
 
 /* Deal banner: the one loud thing on the page */
 .banner {
@@ -187,8 +205,8 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .hovered b { color: var(--new); }
 .pip .hovered { margin: 0 0 8px; padding: 6px 8px; font-size: .8rem; }
 
-/* What the scanner sees */
-.seen { display: flex; gap: 12px; align-items: flex-start; padding: 0 18px 12px; }
+/* What the scanner sees, in Settings → Troubleshooting */
+.seen { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
 .seen canvas { max-width: 160px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
 .seen p { margin: 0; font-size: .84rem; color: var(--muted); max-width: 46ch; }
 
@@ -212,22 +230,7 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 tr.ap-ignored td { color: var(--sold); }
 tr.ap-ignored .nm-n { text-decoration: line-through; }
 tr.ap-unpriced td:first-child { box-shadow: inset 3px 0 0 var(--high); }
-@media (max-width: 640px) {
-  /* each line becomes a card: the name over its count, price and total, so nothing scrolls sideways */
-  #apTable thead { display: none; }
-  #apTable, #apTable tbody { display: block; }
-  #apTable tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: start; }
-  #apTable tbody tr:last-child { border-bottom: 0; }
-  #apTable td { display: block; border: 0; padding: 0; min-width: 0; }
-  #apTable td:nth-child(1) { grid-column: 1 / -1; }
-  #apTable td:nth-child(2)::before, #apTable td:nth-child(3)::before, #apTable td:nth-child(4)::before { display: block; font-size: .72rem; color: var(--muted); text-align: left; }
-  #apTable td:nth-child(2)::before { content: "Qty"; }
-  #apTable td:nth-child(3)::before { content: "Each"; }
-  #apTable td:nth-child(4)::before { content: "Total"; text-align: right; }
-  #apTable td:nth-child(4) { text-align: right; font-weight: 700; }
-  #apTable td:nth-child(5) { grid-column: 1 / 3; }
-  #apTable td:nth-child(6) { grid-column: 3; text-align: right; }
-}
+
 .aprough { color: var(--high); margin-top: 8px; }
 .aptoolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 12px 0 6px; }
 .aptoolbar .field { min-width: 190px; }
@@ -258,29 +261,36 @@ td .sub.warn { color: var(--accent); }
 .searchbox { padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); min-width: 0; width: 240px; max-width: 100%; }
 .booktable { max-height: 480px; overflow: auto; }
 
-/* Rules: folded away by default, with the current numbers in the summary */
-details.rules > summary { cursor: pointer; list-style: none; padding-bottom: 14px; border-radius: 14px; }
-details.rules > summary::-webkit-details-marker { display: none; }
-details.rules > summary h2::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted); font-size: .85em; transition: transform .15s ease; }
-details.rules[open] > summary { padding-bottom: 10px; }
-details.rules[open] > summary h2::before { transform: rotate(90deg); }
-details.rules > summary:hover h2 { color: var(--accent); }
-@media (prefers-reduced-motion: reduce) { details.rules > summary h2::before { transition: none; } }
-.settings { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px 16px; }
+/* Settings: generated from the table of settings, one row per setting with its help line */
+.settings { display: grid; }
+.setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.setting:first-child { border-top: 0; padding-top: 2px; }
+.setting.extra { border-top: 0; padding-top: 0; }
+.setting-text { display: grid; gap: 1px; min-width: 0; }
+.setting-text label { font-weight: 700; font-size: .92rem; }
+.help { color: var(--muted); font-size: .8rem; line-height: 1.35; }
+.setting-control { display: grid; grid-template-columns: auto 5.5em; align-items: center; gap: 8px; justify-items: end; }
+.setting-control input[type="number"] { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.setting-control input[type="number"], .setting-control select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.setting-control .unit { justify-self: start; color: var(--muted); font-size: .8rem; line-height: 1.2; }
+.switch { appearance: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(16px); }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+details.trouble { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.trouble > summary { cursor: pointer; font-weight: 700; font-size: .9rem; color: var(--muted); }
+details.trouble[open] > summary { margin-bottom: 8px; }
 .field { display: grid; gap: 4px; font-size: .88rem; align-content: start; }
 .field > span { font-weight: 700; }
-.field small { color: var(--muted); font-size: .78rem; line-height: 1.35; }
 .field input, .field select { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .field > span em { font-style: normal; font-weight: 400; color: var(--muted); }
 
-/* Prices and backup */
-.datagrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 18px 28px; }
-.datagrid > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+/* Prices */
 textarea { width: 100%; min-height: 92px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); font: .86rem/1.5 var(--f-body); resize: vertical; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .note { font-size: .84rem; color: var(--muted); margin: 0; max-width: 72ch; }
 .note:empty { display: none; }
-.datagrid p { margin: 0; }
 .marketline { font-size: .92rem; }
 .marketline b { font-weight: 700; }
 

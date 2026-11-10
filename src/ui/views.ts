@@ -4,7 +4,7 @@ import type { Engine } from '../engine';
 import { iconUrl } from '../icons';
 import { ago, cap, clock, DAY, esc, fmt, fmtEach, fmtShort, salesTxt, signed } from '../lib/format';
 import { norm, parseAmount } from '../lib/text';
-import type { BookItem, MarketItem, Settings, ShopSortCol, UsualSource, Verdict } from '../lib/types';
+import type { BookItem, MarketItem, ScanMode, ShopSortCol, UsualSource, Verdict } from '../lib/types';
 import { isRough, marketTip, type MarketIndex } from '../market/marketIndex';
 import { usualPrice } from '../pricing/evaluate';
 import { sightingStats } from '../pricing/priceBook';
@@ -141,13 +141,20 @@ export function dealsHtml(deals: readonly Deal[], market: MarketIndex, failed?: 
   }).join('');
 }
 
-export interface OverlayState { open: boolean; capturing: boolean; rows: DisplayRow[]; deal: Deal | null; hover: string; hoverKey: string | null }
+export interface OverlayState {
+  mode: ScanMode; open: boolean; capturing: boolean; scanning: boolean; rows: DisplayRow[]; deal: Deal | null; hover: string; hoverKey: string | null;
+}
 
-/** The overlay: the newest deal on top, then the best eight rows of the open shop. */
-export function overlayHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySet<string>, extra = ''): string {
+/**
+ * The overlay, named by the mode. Deals: the newest deal on top, then the best eight rows of the open shop.
+ * Inventory: `inventory`, what the Inventory view gives it.
+ */
+export function overlayHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySet<string>, inventory = ''): string {
+  const doing = !o.capturing ? 'Not capturing' : o.mode === 'inventory' ? (o.scanning ? 'Scanning' : 'Paused') : o.open ? 'Shop open' : 'Watching';
+  const head = `<div class="ph"><b>${o.mode === 'inventory' ? 'Inventory' : 'Deals'}</b><span>${doing}</span></div>`;
+  if (o.mode === 'inventory') return head + inventory;
   const rows = o.rows.slice(0, 8);
   const l = o.deal ? dealLine(o.deal, market) : null;
-  const head = `<div class="ph"><b>FM Deal Scanner</b><span>${o.open ? 'Shop open' : o.capturing ? 'Watching' : 'Not capturing'}</span></div>`;
   const hover = o.hover && o.hoverKey != null ? `<p class="hovered">${iconHtml(market, o.hoverKey, failed)}<span>${esc(o.hover)}</span></p>` : '';
   const deal = l && o.deal
     ? `<div class="banner"><span class="label">Deal at ${clock(o.deal.ts)}</span><span class="what">${iconHtml(market, o.deal.key, failed)}<span>${esc(l.name)}</span></span><span class="math">${esc(cap(l.listing))}, ${esc(l.why)}</span><span class="profit">${esc(l.profit)}</span></div>`
@@ -157,7 +164,7 @@ export function overlayHtml(o: OverlayState, market: MarketIndex, failed?: Reado
       + '<thead><tr><th>Item</th><th class="n">Each</th><th class="n">Usual</th><th class="n" title="Price now vs usual price">%</th><th></th></tr></thead>'
       + `<tbody>${rows.map((r) => overlayRowHtml(r, market, failed)).join('')}</tbody></table>`
     : '<p class="empty">Open a shop in the game.</p>';
-  return head + extra + hover + deal + table;
+  return head + hover + deal + table;
 }
 
 // ---------- price book ----------
@@ -209,9 +216,6 @@ export function marketInfo(m: MarketIndex, now: number): string {
     + (old ? ' <span class="warn">Getting old, update them.</span>' : '')
     + (m.withNpc ? ` ${fmt(m.withNpc)} have an NPC shop price.` : ' <span class="warn">No NPC prices: load the tracker page again to get them.</span>');
 }
-
-export const rulesSummary = (st: Settings): string =>
-  `${st.discount}% off, ${fmt(st.minProfit)}+ profit, ${st.fee}% fee` + (st.market === 'off' ? ', market prices off' : '') + (st.area === 'manual' ? ', marked area' : '');
 
 /** "Cape INT Scroll: Lesser, 80k" lines: a name and a price each. */
 export function parsePriceLines(text: string): { ok: { name: string; value: number }[]; bad: string[] } {

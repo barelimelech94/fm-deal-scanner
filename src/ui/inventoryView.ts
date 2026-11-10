@@ -1,48 +1,37 @@
-import { APPRAISAL_MODES, appraise, AS_ADDED, cleanAppraisalSort, nextAppraisalSort, sortLines, type AppraisalResult, type AppraisalSort } from '../appraisal/appraise';
+import { appraise, AS_ADDED, cleanAppraisalSort, nextAppraisalSort, sortLines, type AppraisalResult, type AppraisalSort } from '../appraisal/appraise';
 import { addEntry, clampQty, entryFor, parseAppraisalLines } from '../appraisal/entries';
 import { HoverCollector, type HoverEvent } from '../appraisal/hovers';
 import { quoteFull, quoteShort } from '../appraisal/quote';
 import type { Engine } from '../engine';
 import { parseAmount } from '../lib/text';
-import { DEFAULT_SETTINGS, type AppraisalData, type AppraisalEntry, type AppraisalMode, type AppraisalSortCol, type Region } from '../lib/types';
+import type { AppraisalData, AppraisalEntry, AppraisalSortCol, Region } from '../lib/types';
 import type { Storage } from '../store/storage';
 import { appraisalRowsHtml, appraisalText, overlayAppraisalHtml } from './appraisalViews';
 import { $ } from './dom';
 
-export interface PanelDeps {
+export interface InventoryDeps {
   engine: Engine;
   store: Storage;
   failed: ReadonlySet<string>;
   /** the area marked for items, if any */
   region(): Region | null;
-  /** a screen share or a screenshot is there to scan */
-  canScan(): boolean;
-  /** open the dialog that marks the area */
-  onMark(): void;
-  /** scanning was turned on or off */
-  onScan(on: boolean): void;
+  /** turns scanning your items on or off; false when it can't start, with nothing to scan */
+  setScanning(on: boolean): boolean;
 }
 
 const CLEAR_LABEL = 'Clear';
 
-/** The appraisal panel: the list you build by hand or by hovering items, what it is worth, and the quote. */
-export class AppraisalPanel {
+/** The Inventory view: your items, added by hand or by hovering them, what they are worth, and the quote. */
+export class InventoryView {
   private data: AppraisalData;
   readonly collector: HoverCollector;
   private clearArmed = 0;
   private hint = '';
   private hintWarn = false;
 
-  constructor(private readonly d: PanelDeps) {
+  constructor(private readonly d: InventoryDeps) {
     this.data = d.store.loadAppraisal();
     this.collector = new HoverCollector(d.engine, this.data);
-    // settings saved by hand or by another version can hold anything: fall back to the defaults
-    const s = d.engine.settings;
-    if (!(s.appraisalMode in APPRAISAL_MODES)) s.appraisalMode = DEFAULT_SETTINGS.appraisalMode;
-    if (!(s.bulkOffer > 0)) s.bulkOffer = DEFAULT_SETTINGS.bulkOffer;
-    if (s.appraisalArea !== 'any' && s.appraisalArea !== 'marked') s.appraisalArea = DEFAULT_SETTINGS.appraisalArea;
-    const o = cleanAppraisalSort(s.appraisalSort, s.appraisalSortDir);
-    s.appraisalSort = o.col; s.appraisalSortDir = o.dir;
   }
 
   private get settings() { return this.d.engine.settings; }
@@ -94,21 +83,19 @@ export class AppraisalPanel {
 
   /** Turns scanning on or off. Returns whether it is on: it can't start with nothing to scan. */
   setScanning(on: boolean): boolean {
-    if (on && !this.d.canScan()) {
-      this.setHint('Start the screen capture first (or load a screenshot), then press Start scanning.', true);
-      this.render();
-      return false;
-    }
-    if (this.collector.scanning === on) return on;
-    this.collector.scanning = on;
-    this.collector.noTooltip();
-    this.setHint(on ? 'Scanning. Point at an item in the game: it is added a moment after the tooltip appears. Pause before moving over things you don\'t want counted.' : '');
+    if (this.d.setScanning(on) === on) return on;
+    this.setHint('Start the screen capture first (or load a screenshot), then press Start scanning.', true);
     this.render();
-    this.d.onScan(on);
-    return on;
+    return false;
   }
 
   toggleScanning(): void { this.setScanning(!this.scanning); }
+
+  /** Scanning was turned on or off, here or elsewhere: the hint says what that means. */
+  scanningChanged(): void {
+    this.setHint(this.scanning ? 'Scanning. Point at an item in the game: it is added a moment after the tooltip appears. Pause before moving over things you don\'t want counted.' : '');
+    this.render();
+  }
 
   /** A hover was read: say what it did, and show the new line. */
   showEvent(ev: HoverEvent): void {
@@ -118,28 +105,6 @@ export class AppraisalPanel {
   }
 
   wire(): void {
-    const mode = $<HTMLSelectElement>('apMode'), bulk = $<HTMLInputElement>('apBulk'), area = $<HTMLSelectElement>('apArea');
-    mode.value = this.settings.appraisalMode;
-    bulk.value = String(this.settings.bulkOffer);
-    area.value = this.settings.appraisalArea;
-    mode.addEventListener('change', () => {
-      this.settings.appraisalMode = mode.value as AppraisalMode;
-      this.d.store.saveSettings(this.settings);
-      this.render();
-    });
-    bulk.addEventListener('change', () => {
-      const v = parseFloat(bulk.value);
-      if (Number.isFinite(v) && v > 0) this.settings.bulkOffer = Math.min(300, Math.round(v * 10) / 10);
-      bulk.value = String(this.settings.bulkOffer);
-      this.d.store.saveSettings(this.settings);
-      this.render();
-    });
-    area.addEventListener('change', () => {
-      this.settings.appraisalArea = area.value === 'marked' ? 'marked' : 'any';
-      this.d.store.saveSettings(this.settings);
-      this.setHint(this.settings.appraisalArea === 'marked' && !this.d.region() ? 'Press Mark area to draw the box around your item slots.' : '');
-      this.render();
-    });
     // order the lines: a click on a column (again to flip), the Order list, or back to the order they were added in
     for (const th of document.querySelectorAll<HTMLElement>('#apTable th.sortable')) {
       const pick = () => this.setSort(nextAppraisalSort(this.sort(), th.dataset.col as AppraisalSortCol));
@@ -153,7 +118,6 @@ export class AppraisalPanel {
     });
     $('apSortReset').addEventListener('click', () => this.setSort(AS_ADDED));
     $('apScan').addEventListener('click', () => this.toggleScanning());
-    $('apMark').addEventListener('click', () => this.d.onMark());
     $('apUndo').addEventListener('click', () => {
       const ev = this.collector.undo();
       if (ev) this.showEvent(ev);
@@ -225,8 +189,6 @@ export class AppraisalPanel {
     scan.setAttribute('aria-pressed', String(on));
     $('apState').textContent = on ? 'Scanning: point at your items' : 'Paused';
     $('apState').dataset.on = String(on);
-    $<HTMLSelectElement>('apArea').value = this.settings.appraisalArea;
-    $<HTMLButtonElement>('apMark').disabled = !this.d.canScan();
     $<HTMLButtonElement>('apUndo').disabled = !this.collector.canUndo;
     $('apHint').textContent = this.hint;
     $('apHint').hidden = !this.hint;

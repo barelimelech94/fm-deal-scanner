@@ -4,7 +4,7 @@ import { addEntry, cleanEntries, clampQty, entryFor, MAX_QTY, parseAppraisalLine
 import { quoteFull, quoteShort } from '../src/appraisal/quote';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type TooltipRead } from '../src/lib/types';
 import { Storage } from '../src/store/storage';
-import { AppraisalPanel } from '../src/ui/appraisalPanel';
+import { InventoryView } from '../src/ui/inventoryView';
 import { engine, FACTS, ITEMS, NOW } from './helpers/market';
 
 const e = engine({ settings: { appraisalMode: 'fair' } });
@@ -190,12 +190,12 @@ describe('Storage', () => {
   });
 });
 
-describe('AppraisalPanel', () => {
+describe('InventoryView', () => {
   const panel = (over: Record<string, unknown>) => {
     const en = engine();
     Object.assign(en.settings, over);
     const st = new Storage(null);
-    return { en, p: new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => null, canScan: () => true, onMark: () => {}, onScan: () => {} }) };
+    return { en, p: new InventoryView({ engine: en, store: st, failed: new Set(), region: () => null, setScanning: () => false }) };
   };
 
   it('starts empty and keeps good settings', () => {
@@ -204,17 +204,10 @@ describe('AppraisalPanel', () => {
     expect(en.settings).toMatchObject({ appraisalMode: 'greedy', bulkOffer: 85 });
   });
 
-  it('falls back to the defaults when saved settings are nonsense', () => {
-    const { en } = panel({ appraisalMode: 'cheap', bulkOffer: NaN });
-    expect(en.settings).toMatchObject({ appraisalMode: DEFAULT_SETTINGS.appraisalMode, bulkOffer: DEFAULT_SETTINGS.bulkOffer });
-    expect(panel({ appraisalMode: 'nope', bulkOffer: -5 }).en.settings).toMatchObject({ appraisalMode: 'fair', bulkOffer: 100 });
-    expect(panel({ appraisalArea: 'everywhere' }).en.settings.appraisalArea).toBe('any');
-  });
-
   it('counts hovers anywhere, or only near the marked area once one is chosen', () => {
     const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.3 };
     const en = engine(), st = new Storage(null);
-    const p = new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => region, canScan: () => true, onMark: () => {}, onScan: () => {} });
+    const p = new InventoryView({ engine: en, store: st, failed: new Set(), region: () => region, setScanning: () => false });
     expect(p.area()).toBeNull();
     en.settings.appraisalArea = 'marked';
     expect(p.area()).toEqual(region);
@@ -232,12 +225,8 @@ describe('AppraisalPanel', () => {
     expect(p.entries().map((x) => [x.name, x.qty])).toEqual([['Lemona', 3], ['Red Potion', 84]]);
   });
 
-  it('starts paused, and scanning needs something to scan', () => {
-    const en = engine(), st = new Storage(null);
-    let on: boolean | null = null;
-    const p = new AppraisalPanel({ engine: en, store: st, failed: new Set(), region: () => null, canScan: () => false, onMark: () => {}, onScan: (v) => { on = v; } });
-    expect(p.scanning).toBe(false);
-    expect(on).toBeNull();
+  it('starts paused', () => {
+    expect(panel({}).p.scanning).toBe(false);
   });
 });
 
@@ -304,12 +293,12 @@ describe('ordering the lines', () => {
     expect(quoteFull(r).split('\n')[1]).toBe('Gloves Attack Scroll: Greater ×2 = 860,000');
   });
 
-  it('is part of the saved settings, and a panel falls back when they are nonsense', () => {
+  it('is part of the saved settings, and the view falls back when they are nonsense', () => {
     expect(DEFAULT_SETTINGS).toMatchObject({ appraisalSort: 'added', appraisalSortDir: 1 });
     const mk = (over: Record<string, unknown>) => {
       const en = engine();
       Object.assign(en.settings, over);
-      const p = new AppraisalPanel({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, canScan: () => true, onMark: () => {}, onScan: () => {} });
+      const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, setScanning: () => false });
       p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);
       return p;
     };

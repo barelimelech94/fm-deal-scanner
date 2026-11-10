@@ -3,7 +3,7 @@ import type { RawListing } from '../src/lib/types';
 import { newItem } from '../src/pricing/priceBook';
 import { ShopSession } from '../src/shop/session';
 import {
-  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, rulesSummary, shopMeta, shopRowHtml, sortRows,
+  BEST_FIRST, bookRowHtml, bookRows, cleanSort, dealLine, hoverText, iconHtml, nextSort, overlayHtml, overlayRowHtml, parsePriceLines, shopMeta, shopRowHtml, sortRows,
 } from '../src/ui/views';
 import { DEFAULT_SETTINGS } from '../src/lib/types';
 import { catalogOf, engine, NOW } from './helpers/market';
@@ -78,9 +78,17 @@ describe('shop rows', () => {
 });
 
 describe('overlay', () => {
+  const state = { mode: 'deals' as const, open: false, capturing: true, scanning: false, rows: [], deal: null, hover: '', hoverKey: null };
   it('shows a placeholder without a shop', () => {
     const e = engine();
-    expect(overlayHtml({ open: false, capturing: true, rows: [], deal: null, hover: '', hoverKey: null }, e.market)).toContain('Open a shop in the game.');
+    const html = overlayHtml(state, e.market);
+    expect(html).toContain('Open a shop in the game.');
+    expect(html).toContain('<b>Deals</b><span>Watching</span>');
+  });
+  it("shows your items' part in inventory mode, and nothing of the shop", () => {
+    const e = engine();
+    const html = overlayHtml({ ...state, mode: 'inventory', scanning: true, hover: 'Traus', hoverKey: 'traus' }, e.market, undefined, '<div id="mine"></div>');
+    expect(html).toBe('<div class="ph"><b>Inventory</b><span>Scanning</span></div><div id="mine"></div>');
   });
 });
 
@@ -110,13 +118,6 @@ describe('parsePriceLines', () => {
       ok: [{ name: 'Cape INT Scroll: Lesser', value: 80000 }, { name: 'Tobi Throwing Stars', value: 1800000 }, { name: 'Lemona', value: 25000 }],
       bad: ['nonsense'],
     });
-  });
-});
-
-describe('rulesSummary', () => {
-  it('sums up the rules in a line', () => {
-    expect(rulesSummary(DEFAULT_SETTINGS)).toBe('25% off, 3,000+ profit, 3% fee');
-    expect(rulesSummary({ ...DEFAULT_SETTINGS, market: 'off', area: 'manual' })).toBe('25% off, 3,000+ profit, 3% fee, market prices off, marked area');
   });
 });
 

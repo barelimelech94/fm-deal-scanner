@@ -70,6 +70,9 @@ async function loadShot(page: Page, file: ReturnType<typeof screenFile>) {
 
 const shopNames = (page: Page) => page.locator('#shopTable tbody .nm-n').allTextContents();
 
+/** Opens a view by its tab in the bar. */
+const view = (page: Page, name: 'deals' | 'inventory' | 'prices' | 'settings') => page.click(`#tab-${name}`);
+
 test('loads with no errors and serves the reader from the site', async ({ page }) => {
   const { errors } = await open(page);
   await expect(page.locator('#statusText')).toContainText('Not capturing');
@@ -99,6 +102,7 @@ test('reads a shop from a screenshot and flags the deal', async ({ page }) => {
   // item pictures by item id, from Classic World's data
   await expect.poll(() => icons).toContain('https://maplestory.io/api/MCW/1/item/1472013/icon');
   // the sighting is in the price book
+  await view(page, 'prices');
   await expect(page.locator('#bookTable tbody')).toContainText('Dark Guardian');
   expect(errors).toEqual([]);
 });
@@ -123,6 +127,7 @@ test('keeps your data from the single-file scanner', async ({ page }) => {
   };
   await page.setInputFiles('#fileImport', { name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
   await expect(page.locator('#dataMsg')).toHaveText('Imported 1 item.');
+  await view(page, 'prices');
   const row = page.locator('#bookTable tbody tr', { hasText: 'Lemona' });
   await expect(row.locator('input[data-field="manualRef"]')).toHaveValue('25,000');
   await expect(row.locator('input[data-field="buyUnder"]')).toHaveValue('15,000');
@@ -139,6 +144,7 @@ test('appraises a pile of items typed in, and keeps it', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
   await expect(page.locator('#marketMsg')).toContainText('Loaded 7 market prices');
+  await view(page, 'inventory');
   await expect(page.locator('#apMeta')).toHaveText('Nothing added yet');
   await expect(page.locator('#apEmpty')).toBeVisible();
 
@@ -206,6 +212,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await expect(page.locator('#marketMsg')).toContainText('Loaded 10 market prices');
   const screen = (name: string) => screenFile(`${name}.png`, placeOn(loadPng(`appraisal/${name}.png`), 1440, 900, 100, 100));
   const rows = page.locator('#apBody tr');
+  await view(page, 'inventory');
 
   // nothing to scan yet: scanning can't start
   await page.click('#apScan');
@@ -220,7 +227,7 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await expect(rows.first()).toContainText('Overall Armor LUK Scroll: Greater');
   await expect(rows.first().locator('.cellinput.unsure')).toHaveCount(1);
   await expect(page.locator('#apHint')).toContainText('type how many you have');
-  await expect(page.locator('#statusText')).toContainText('Scanning hovers');
+  await expect(page.locator('#statusText')).toContainText('Scanning your items');
 
   // another item, in the trade window: an equip, with its stats
   await loadShot(page, screen('trade-equip'));
@@ -254,7 +261,8 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await expect(rows).toHaveCount(2);
 
   // with an area marked far from the tooltip, hovering adds nothing either
-  await page.click('#apMark');
+  await view(page, 'settings');
+  await page.click('#btnMarkItems');
   await expect(page.locator('#calib')).toBeVisible();
   await expect(page.locator('#hCalib')).toHaveText('Mark the area of items');
   const box = (await page.locator('#calibCanvas').boundingBox())!;
@@ -264,22 +272,26 @@ test('adds the items you hover to the appraisal, and only while scanning', async
   await page.mouse.up();
   await page.click('#calibSave');
   await expect(page.locator('#calib')).toBeHidden();
-  await expect(page.locator('#apArea')).toHaveValue('marked');
+  await expect(page.locator('#set-appraisalArea')).toHaveValue('marked');
+  await view(page, 'inventory');
   await page.click('#apScan');
   await expect(page.locator('#apState')).toHaveText('Scanning: point at your items');
   await expect(rows).toHaveCount(2);   // the screenshot on screen has its tooltip far from the box
   await loadShot(page, screen('equip-not-worn'));
   await expect(rows).toHaveCount(2);
   // back to anywhere: it is counted
-  await page.selectOption('#apArea', 'any');
+  await view(page, 'settings');
+  await page.selectOption('#set-appraisalArea', 'any');
   await loadShot(page, screen('equip-extra-points'));
+  await view(page, 'inventory');
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(2)).toContainText('Blue Bamboo Hat');
   // stopping the capture is not needed to pause; the area and the lines are kept across a reload
   await page.reload();
   await expect(rows).toHaveCount(3);
   await expect(page.locator('#apState')).toHaveText('Paused');
-  await expect(page.locator('#apArea')).toHaveValue('any');
+  await view(page, 'settings');
+  await expect(page.locator('#set-appraisalArea')).toHaveValue('any');
   expect(errors).toEqual([]);
 });
 
@@ -333,6 +345,7 @@ test('orders the appraisal by a column, most valuable first, and remembers it', 
   const { errors } = await open(page);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await view(page, 'inventory');
   await page.fill('#apAdd', 'Lemona\nWolbi Throwing Stars x2\nCape INT Scroll: Lesser x3\nMystery Thing x4\nShoes Speed Scroll: Chaos x5');
   await page.click('#apAddBtn');
   const names = async () => (await page.locator('#apBody .nm-n').allTextContents()).map((n) => n.trim());
@@ -363,7 +376,7 @@ test('orders the appraisal by a column, most valuable first, and remembers it', 
   expect(await names()).toEqual(['Cape INT Scroll: Lesser', 'Lemona', 'Mystery Thing', 'Shoes Speed Scroll: Chaos', 'Wolbi Throwing Stars']);
   await expect(page.locator('#apTable th[data-col="total"]')).toHaveAttribute('aria-sort', 'none');
 
-  // the Order list does the same, which is how it works on a phone, where the headers are hidden
+  // the Order list does the same
   await page.selectOption('#apOrder', 'qty:-1');
   expect((await names()).slice(0, 3)).toEqual(['Shoes Speed Scroll: Chaos', 'Mystery Thing', 'Cape INT Scroll: Lesser']);
   await expect(page.locator('#apTable th[data-col="qty"]')).toHaveAttribute('aria-sort', 'descending');
@@ -394,7 +407,9 @@ test('uses what an NPC pays: a deal in the shop, a floor in the appraisal, and o
   ]);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(withNpc) });
   await expect(page.locator('#marketMsg')).toContainText('1 have an NPC shop price');
+  await view(page, 'prices');
   await expect(page.locator('#marketAge')).toContainText('1 have an NPC shop price');
+  await view(page, 'deals');
 
   // in the shop: Lemona at 19,999 is only "fair" by the market, but an NPC pays 5,001 more than it costs
   await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
@@ -407,7 +422,22 @@ test('uses what an NPC pays: a deal in the shop, a floor in the appraisal, and o
   // the other listings have no NPC price
   await expect(page.locator('#shopTable tbody tr', { hasText: 'Dark Guardian' }).locator('td').nth(2)).not.toContainText('NPC');
 
-  // in the appraisal: an NPC pays more than the market, so it is worth at least that
+  // turned off, none of it applies: the open shop is judged afresh (only Dark Guardian is still a deal), and
+  // the log keeps the alert that already went off
+  await view(page, 'settings');
+  await page.fill('#set-npcRatio', '0');
+  await page.press('#set-npcRatio', 'Tab');
+  await view(page, 'deals');
+  await expect(lemona.locator('.chip')).not.toHaveText('Deal');
+  await expect(lemona.locator('td').nth(2)).not.toContainText('NPC');
+  await expect(page.locator('#shopTable tbody tr.v-deal')).toHaveCount(1);
+  await expect(page.locator('#dealList li', { hasText: 'Lemona' })).toHaveCount(1);
+
+  // in your items: an NPC pays more than the market, so it is worth at least that
+  await view(page, 'settings');
+  await page.fill('#set-npcRatio', '50');
+  await page.press('#set-npcRatio', 'Tab');
+  await view(page, 'inventory');
   await page.fill('#apAdd', 'Lemona x2\nCape INT Scroll: Lesser');
   await page.click('#apAddBtn');
   await expect(page.locator('#apTotal')).toHaveText('115,000');   // 2 × 25,000 + 65,000
@@ -415,30 +445,85 @@ test('uses what an NPC pays: a deal in the shop, a floor in the appraisal, and o
   await expect(row).toContainText('NPC price');
   await expect(row).toContainText('NPC pays 25,000');
   await expect(row.locator('.chip')).toHaveText('Rough');
-
-  // turned off, none of it applies
-  await page.click('#rulesBox summary');
-  await page.fill('#setNpc', '0');
-  await page.press('#setNpc', 'Tab');
-  await expect(lemona.locator('.chip')).not.toHaveText('Deal');
-  await expect(lemona.locator('td').nth(2)).not.toContainText('NPC');
-  // the table is judged afresh (only Dark Guardian is still a deal); the log keeps the alert that already went off
-  await expect(page.locator('#shopTable tbody tr.v-deal')).toHaveCount(1);
-  await expect(page.locator('#dealList li', { hasText: 'Lemona' })).toHaveCount(1);
+  // turned off again, the floor goes
+  await view(page, 'settings');
+  await page.fill('#set-npcRatio', '0');
+  await page.press('#set-npcRatio', 'Tab');
+  await view(page, 'inventory');
   await expect(page.locator('#apTotal')).toHaveText('107,000');   // 2 × 21,000 + 65,000
   await expect(row).not.toContainText('NPC');
 
   // and the setting is kept
   await page.reload();
-  await expect(page.locator('#setNpc')).toHaveValue('0');
+  await view(page, 'settings');
+  await expect(page.locator('#set-npcRatio')).toHaveValue('0');
   expect(errors).toEqual([]);
 });
 
-test('fits a phone screen without scrolling sideways', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await open(page);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
+test('shows one view at a time, by tab, by address and by keyboard, and remembers the last', async ({ page }) => {
+  const { errors } = await open(page);
+  const shown = () => page.locator('[role="tabpanel"]:not([hidden])');
+  await expect(shown()).toHaveAttribute('id', 'view-deals');
+  await expect(page.locator('#tab-deals')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#captureMode')).toHaveText('Deals');
+
+  // a tab: the address follows, and opening Inventory sets the mode
+  await view(page, 'inventory');
+  await expect(shown()).toHaveAttribute('id', 'view-inventory');
+  await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveCount(1);
+  expect(new URL(page.url()).hash).toBe('#inventory');
+  await expect(page.locator('#captureMode')).toHaveText('Inventory');
+
+  // the arrows move along the tabs, round the end to the gear; Settings leaves the mode alone
+  await page.focus('#tab-inventory');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tab-prices')).toBeFocused();
+  await expect(shown()).toHaveAttribute('id', 'view-prices');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tab-settings')).toBeFocused();
+  await expect(page.locator('#tab-settings')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#captureMode')).toHaveText('Inventory');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#tab-deals')).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(shown()).toHaveAttribute('id', 'view-settings');
+
+  // the last view is kept, also without the address
+  await page.goto('./');
+  await expect(shown()).toHaveAttribute('id', 'view-settings');
+  // and the address opens a view
+  await page.goto('./#prices');
+  await expect(shown()).toHaveAttribute('id', 'view-prices');
+  await page.evaluate(() => { location.hash = '#deals'; });
+  await expect(shown()).toHaveAttribute('id', 'view-deals');
+  await expect(page.locator('#captureMode')).toHaveText('Deals');
+  expect(errors).toEqual([]);
+});
+
+test('keeps a setting within its limits as it is typed, and in step wherever it is shown', async ({ page }) => {
+  const { errors } = await open(page);
+  await view(page, 'settings');
+  for (const [key, typed, kept] of [['discount', '-50', '5'], ['fee', '500', '20'], ['interval', '0.01', '0.4']] as const) {
+    await page.fill(`#set-${key}`, typed);
+    await page.press(`#set-${key}`, 'Tab');
+    await expect(page.locator(`#set-${key}`)).toHaveValue(kept);
+  }
+  await page.reload();
+  await expect(page.locator('#set-discount')).toHaveValue('5');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 5, fee: 20, interval: 0.4 });
+
+  // the offer is shown in Settings and in Inventory: a change in one shows in the other
+  await page.fill('#set-bulkOffer', '80');
+  await page.press('#set-bulkOffer', 'Tab');
+  await view(page, 'inventory');
+  await expect(page.locator('#apBulk')).toHaveValue('80');
+  await expect(page.locator('#apOfferLabel')).toHaveText('Offer at 80%');
+  await page.fill('#apBulk', '1000');
+  await page.press('#apBulk', 'Tab');
+  await expect(page.locator('#apBulk')).toHaveValue('300');
+  await view(page, 'settings');
+  await expect(page.locator('#set-bulkOffer')).toHaveValue('300');
+  expect(errors).toEqual([]);
 });
 
 test('reads shops at every game and screen size', async ({ page }) => {

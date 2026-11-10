@@ -53,7 +53,6 @@ export interface ScannerHooks {
 /** One pass over a frame: find the list and any tooltip, read them, and hand the results to the shop. */
 export class Scanner<F, I> {
   busy = false;
-  scans = 0;
   /** where the list was found in the last frame */
   found: Region | null = null;
   /** screen pixels per game pixel, from the last list found */
@@ -115,7 +114,6 @@ export class Scanner<F, I> {
       if (p.tip) await this.readTooltip(p.tip);
     } finally {
       this.busy = false;
-      this.scans++;
     }
   }
 

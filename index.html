@@ -13,217 +13,180 @@
   <div class="bar">
     <div class="brand">
       <div class="coin" aria-hidden="true">M</div>
-      <div>
-        <h1>FM Deal Scanner</h1>
-        <p>Reads player shops off your screen and flags anything under its usual price.</p>
-      </div>
+      <h1>FM Deal Scanner</h1>
     </div>
-    <div class="controls">
+    <div class="tabs" role="tablist" aria-label="Views" aria-owns="tab-settings">
+      <button class="tab" role="tab" id="tab-deals" aria-controls="view-deals" aria-selected="true">Deals</button>
+      <button class="tab" role="tab" id="tab-inventory" aria-controls="view-inventory" aria-selected="false" tabindex="-1">Inventory</button>
+      <button class="tab" role="tab" id="tab-prices" aria-controls="view-prices" aria-selected="false" tabindex="-1">Prices</button>
+    </div>
+    <div class="capture">
+      <span class="modechip" id="captureMode">Deals</span>
+      <div class="status" id="status" data-state="idle" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Not capturing.</span></div>
       <button class="btn primary" id="btnStart">Start capture</button>
       <button class="btn" id="btnStop" hidden>Stop</button>
-      <button class="btn" id="btnArea" disabled title="Only needed if the scanner can't find the shop list on its own">Mark shop area</button>
-      <button class="btn" id="btnPip" disabled title="Floats a small always-on-top window over the game">Pop out overlay</button>
-      <span class="btn ghost filebtn">Test with a screenshot<input type="file" id="fileShot" accept="image/*"></span>
-      <label class="toggle"><input type="checkbox" id="optSound" checked> Sound</label>
+      <button class="btn" id="btnPip" disabled title="Floats a small always-on-top window over the game">Overlay</button>
     </div>
+    <button class="tab gear" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false" tabindex="-1" aria-label="Settings" title="Settings">⚙</button>
   </div>
-  <div class="statusrow">
-    <div class="status" id="status" data-state="idle" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Not capturing. Press <b>Start capture</b> and pick the MapleStory window.</span></div>
-    <div class="diag" id="diag" hidden></div>
-  </div>
+  <div class="errorbar" id="captureError" hidden><span id="captureErrorText"></span><button class="x" id="captureErrorClose" aria-label="Dismiss">×</button></div>
 </header>
 
-<main class="grid">
-  <section class="panel lead a-shop" aria-labelledby="hShop">
-    <div class="panel-head">
-      <h2 id="hShop">Open shop</h2>
-      <span class="headtools"><button class="btn small" id="shopSortReset" hidden title="Order by deals first again">Best first</button><span class="meta" id="shopMeta">No shop open</span></span>
-    </div>
-    <div class="banner" id="dealBanner" hidden>
-      <span class="label" id="dealLabel">Deal</span>
-      <span class="what" id="dealWhat"></span>
-      <span class="math" id="dealMath"></span>
-      <span class="profit" id="dealProfit"></span>
-    </div>
-    <p class="hovered" id="hoverLine" hidden></p>
-    <div class="seen" id="seenWrap" hidden>
-      <canvas id="seenCanvas" width="160" height="120" aria-label="The area the scanner reads"></canvas>
-      <p>This is the part of the screen being read. If it doesn't show the item names and prices, use <b>Mark shop area</b>.</p>
-    </div>
-    <div class="panel-body">
-      <div class="tablewrap">
-        <table id="shopTable">
-          <thead><tr>
-            <th class="sortable" data-col="name" tabindex="0">Item</th>
-            <th class="sortable n" data-col="unit" tabindex="0" title="Price each">Each</th>
-            <th class="sortable n" data-col="usual" tabindex="0">Usual</th>
-            <th class="sortable n" data-col="pct" tabindex="0" title="How far under (or over) the usual price">vs usual</th>
-            <th class="sortable n" data-col="profit" tabindex="0" title="If you relist it at the usual price, after the sales fee. Click to put the most profitable first.">Profit</th>
-            <th></th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+<main>
+  <section class="view two" id="view-deals" role="tabpanel" aria-labelledby="tab-deals" tabindex="-1">
+    <section class="panel lead" aria-labelledby="hShop">
+      <div class="panel-head">
+        <h2 id="hShop">Open shop</h2>
+        <span class="headtools"><button class="btn small" id="shopSortReset" hidden title="Order by deals first again">Best first</button><span class="meta" id="shopMeta">No shop open</span></span>
       </div>
-      <p class="empty" id="shopEmpty">Open a player shop or hired merchant in the game. Its items show up here within a second.</p>
-    </div>
-  </section>
-
-  <div class="side a-side">
-  <section class="panel lead" aria-labelledby="hDeals">
-    <div class="panel-head">
-      <h2 id="hDeals">Deals this session</h2>
-      <button class="btn small" id="btnClearDeals">Clear</button>
-    </div>
-    <div class="panel-body">
-      <div class="dealscroll"><ul class="deals" id="dealList"></ul></div>
-      <p class="empty" id="dealsEmpty">Nothing yet. Deals land here with the time you saw them.</p>
-    </div>
-  </section>
-
-  <details class="panel quiet rules" id="rulesBox">
-    <summary class="panel-head"><h2 id="hSet">Rules</h2><span class="meta" id="rulesSum"></span></summary>
-    <div class="panel-body">
-      <div class="settings">
-        <label class="field"><span>Discount needed <em>% under usual</em></span><input id="setDiscount" type="number" min="5" max="90" step="1"></label>
-        <label class="field"><span>Minimum profit <em>mesos</em></span><input id="setMinProfit" type="number" min="0" step="500"></label>
-        <label class="field"><span>Sales fee <em>%</em></span><input id="setFee" type="number" min="0" max="20" step="0.5"></label>
-        <label class="field"><span>Market prices</span>
-          <select id="setMarket"><option value="on">Use them</option><option value="off">Ignore them</option></select></label>
-        <label class="field"><span>Usual from sightings</span>
-          <select id="setBase"><option value="median">Middle price</option><option value="q25">Lower quarter</option></select></label>
-        <label class="field"><span>Sightings to trust</span><input id="setMinSeen" type="number" min="1" max="50" step="1"></label>
-        <label class="field"><span>Shop area</span>
-          <select id="setArea"><option value="auto">Find it automatically</option><option value="manual">Use the area I marked</option></select></label>
-        <label class="field"><span>Read stats on hover</span>
-          <select id="setStats"><option value="on">Yes</option><option value="off">No</option></select></label>
-        <label class="field" title="How much one point above or below the item's base moves its value. Weapon and magic attack count fully, STR, DEX, INT and LUK half."><span>Each stat point <em>% of value</em></span><input id="setStatPct" type="number" min="0" max="50" step="1"></label>
-        <label class="field" title="A used upgrade slot is counted as this many stat points lost, since a clean item can still be scrolled."><span>Each used slot <em>stat points</em></span><input id="setSlotWorth" type="number" min="0" max="5" step="0.5"></label>
-        <label class="field" title="What an NPC pays when you sell it an item, as a share of the price its shop charges. Usually half. 0 ignores NPC prices."><span>NPC pays <em>% of its shop price</em></span><input id="setNpc" type="number" min="0" max="100" step="5"></label>
-        <label class="field"><span>Check every <em>seconds</em></span><input id="setInterval" type="number" min="0.4" max="5" step="0.1"></label>
+      <div class="banner" id="dealBanner" hidden>
+        <span class="label" id="dealLabel">Deal</span>
+        <span class="what" id="dealWhat"></span>
+        <span class="math" id="dealMath"></span>
+        <span class="profit" id="dealProfit"></span>
       </div>
-    </div>
-  </details>
-  </div>
-
-  <section class="panel lead a-appr" aria-labelledby="hAppr">
-    <div class="panel-head">
-      <h2 id="hAppr">Appraisal</h2>
-      <span class="headtools"><button class="btn small" id="apSortReset" hidden title="Back to the order the lines were added in">As added</button><span class="meta" id="apMeta">Nothing added yet</span></span>
-    </div>
-    <div class="panel-body">
-      <p class="note">What a pile of items is worth, for when someone asks "how much for all?". Press <b>Start scanning hovers</b> and point at your items in the game, one by one: each is added as its tooltip shows. Pause before moving over things you don't want counted. Or type the names below.</p>
-      <div class="aptoolbar">
-        <button class="btn primary" id="apScan" aria-pressed="false">Start scanning hovers</button>
-        <span class="apstate" id="apState" data-on="false">Paused</span>
-        <label class="field"><span>Count hovers</span>
-          <select id="apArea"><option value="any">Anywhere on screen</option><option value="marked">Only near the marked area</option></select></label>
-        <button class="btn" id="apMark" disabled title="Drag a box over your item slots, so hovering anything else adds nothing">Mark area</button>
-        <button class="btn ghost" id="apUndo" disabled>Undo last</button>
-      </div>
-      <p class="note aphint" id="apHint" hidden></p>
-      <div class="aprow">
-        <label class="field"><span>Prices</span>
-          <select id="apMode"><option value="fair">Fair</option><option value="greedy">Greedy</option></select></label>
-        <label class="field"><span>Offer <em>% of the total</em></span><input id="apBulk" type="number" min="1" max="300" step="1"></label>
-        <label class="field"><span>Order</span>
-          <select id="apOrder"><option value="added">As added</option><option value="total:-1">Most valuable first</option><option value="name:1">Name, A to Z</option><option value="qty:-1">Most of them first</option><option value="unit:-1">Dearest each first</option><option value="custom" hidden>Custom</option></select></label>
-        <p class="note" id="apModeNote"></p>
-      </div>
-      <div class="tablewrap">
-        <table id="apTable" hidden>
-          <thead><tr>
-            <th class="sortable" data-col="name" tabindex="0">Item</th>
-            <th class="sortable n" data-col="qty" tabindex="0">Qty</th>
-            <th class="sortable n" data-col="unit" tabindex="0" title="Type a price to use instead of the market's, for this line only. Click to put the dearest first.">Each</th>
-            <th class="sortable n" data-col="total" tabindex="0" title="Click to put the most valuable first">Total</th>
-            <th></th>
-            <th></th>
-          </tr></thead>
-          <tbody id="apBody"></tbody>
-        </table>
-      </div>
-      <p class="empty" id="apEmpty">Nothing here yet. Add item names below.</p>
-      <p class="note aprough" id="apWarn" hidden></p>
-      <div class="aptotals">
-        <div><span class="dim">Total</span><b id="apTotal">0</b><small id="apRough"></small></div>
-        <div><span class="dim" id="apOfferLabel">Offer at 100%</span><b id="apOffer">0</b></div>
-      </div>
-      <p class="apquote"><output id="apQuote">Nothing to appraise yet</output></p>
-      <div class="row">
-        <button class="btn primary" id="apCopy" disabled>Copy quote</button>
-        <button class="btn" id="apCopyFull" disabled>Copy full list</button>
-        <button class="btn ghost" id="apClear" disabled>Clear</button>
-      </div>
-      <h3 class="aphead"><label for="apAdd">Add items</label></h3>
-      <textarea id="apAdd" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
-      <div class="row">
-        <button class="btn" id="apAddBtn">Add to appraisal</button>
-      </div>
-      <p class="note" id="apMsg"></p>
-    </div>
-  </section>
-
-  <section class="panel lead a-book" aria-labelledby="hBook">
-    <div class="panel-head">
-      <h2 id="hBook">Price book</h2>
-      <input class="searchbox" id="bookSearch" type="search" placeholder="Find any item" aria-label="Find any item">
-    </div>
-    <div class="panel-body">
-      <div class="booktable">
-        <table id="bookTable">
-          <thead><tr>
-            <th class="sortable" data-col="name">Item</th>
-            <th class="sortable n" data-col="n">Seen</th>
-            <th class="sortable n" data-col="usual">Usual</th>
-            <th class="sortable n" data-col="low">Lowest</th>
-            <th class="sortable n" data-col="last">Last seen</th>
-            <th class="n">Your price</th>
-            <th class="n">Buy under</th>
-            <th></th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="empty" id="bookEmpty">Empty. It fills as you open shops, or paste prices below.</p>
-      <p class="note" id="bookHint" style="margin-top:10px"></p>
-      <p class="note" style="margin-top:6px">Usual is the market price unless tagged <b>you</b> (your price) or <b>seen</b> (your own sightings were lower). The number under it is the tracker's sales count: few sales means slow to resell. Buy under alerts at or below that price, whatever the usual price.</p>
-    </div>
-  </section>
-
-  <section class="panel quiet a-data" aria-labelledby="hData">
-    <div class="panel-head"><h2 id="hData">Prices and backup</h2></div>
-    <div class="panel-body">
-      <div class="datagrid">
-        <div>
-          <h3>Market prices</h3>
-          <p class="marketline" id="marketAge">None loaded yet.</p>
-          <div class="row">
-            <span class="btn filebtn">Update market prices<input type="file" id="fileMarket" accept=".html,.htm,text/html"></span>
-          </div>
-          <p class="note" id="marketMsg"></p>
-          <p class="note">On <a href="https://meso.watch" target="_blank" rel="noreferrer">meso.watch</a>, once your world's price table has loaded, press ⌘S and save the page as <b>Webpage, Complete</b>, then pick that .html file. The prices stay in this browser.</p>
+      <p class="hovered" id="hoverLine" hidden></p>
+      <div class="panel-body">
+        <div class="tablewrap">
+          <table id="shopTable">
+            <thead><tr>
+              <th class="sortable" data-col="name" tabindex="0">Item</th>
+              <th class="sortable n" data-col="unit" tabindex="0" title="Price each">Each</th>
+              <th class="sortable n" data-col="usual" tabindex="0">Usual</th>
+              <th class="sortable n" data-col="pct" tabindex="0" title="How far under (or over) the usual price">vs usual</th>
+              <th class="sortable n" data-col="profit" tabindex="0" title="If you relist it at the usual price, after the sales fee. Click to put the most profitable first.">Profit</th>
+              <th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div>
-          <h3><label for="pasteBox">Your prices</label></h3>
-          <textarea id="pasteBox" placeholder="One item per line, price each:&#10;Cape INT Scroll: Lesser, 80k&#10;Tobi Throwing Stars = 1.8m"></textarea>
-          <div class="row">
-            <button class="btn" id="btnPaste">Add as your prices</button>
-          </div>
-          <p class="note" id="pasteMsg"></p>
-        </div>
-        <div>
-          <h3>Backup</h3>
-          <p class="note">Everything lives in this browser only.</p>
-          <div class="row">
-            <button class="btn" id="btnExport">Export</button>
-            <span class="btn filebtn">Import<input type="file" id="fileImport" accept="application/json,.json"></span>
-            <button class="btn ghost" id="btnWipe">Clear all sightings</button>
-          </div>
-          <p class="note" id="dataMsg"></p>
-        </div>
+        <p class="empty" id="shopEmpty">Open a player shop or hired merchant in the game. Its items show up here within a second.</p>
       </div>
+    </section>
+
+    <section class="panel quiet" aria-labelledby="hDeals">
+      <div class="panel-head">
+        <h2 id="hDeals">Deals this session</h2>
+        <button class="btn small" id="btnClearDeals">Clear</button>
+      </div>
+      <div class="panel-body">
+        <div class="dealscroll"><ul class="deals" id="dealList"></ul></div>
+        <p class="empty" id="dealsEmpty">Nothing yet. Deals land here with the time you saw them.</p>
+      </div>
+    </section>
+  </section>
+
+  <section class="view" id="view-inventory" role="tabpanel" aria-labelledby="tab-inventory" tabindex="-1" hidden>
+    <section class="panel lead" aria-labelledby="hAppr">
+      <div class="panel-head">
+        <h2 id="hAppr">Inventory</h2>
+        <span class="headtools"><button class="btn small" id="apSortReset" hidden title="Back to the order the lines were added in">As added</button><span class="meta" id="apMeta">Nothing added yet</span></span>
+      </div>
+      <div class="panel-body">
+        <p class="note">What a pile of items is worth, for when someone asks "how much for all?". Press <b>Start scanning hovers</b> and point at your items in the game, one by one: each is added as its tooltip shows. Pause before moving over things you don't want counted. Or type the names below.</p>
+        <div class="aptoolbar">
+          <button class="btn primary" id="apScan" aria-pressed="false">Start scanning hovers</button>
+          <span class="apstate" id="apState" data-on="false">Paused</span>
+          <button class="btn ghost" id="apUndo" disabled>Undo last</button>
+        </div>
+        <p class="note aphint" id="apHint" hidden></p>
+        <div class="aprow">
+          <label class="field"><span>Prices</span>
+            <select id="apMode" data-setting="appraisalMode"><option value="fair">Fair</option><option value="greedy">Greedy</option></select></label>
+          <label class="field"><span>Offer <em>% of the total</em></span><input id="apBulk" data-setting="bulkOffer" type="number" min="1" max="300" step="1"></label>
+          <label class="field"><span>Order</span>
+            <select id="apOrder"><option value="added">As added</option><option value="total:-1">Most valuable first</option><option value="name:1">Name, A to Z</option><option value="qty:-1">Most of them first</option><option value="unit:-1">Dearest each first</option><option value="custom" hidden>Custom</option></select></label>
+          <p class="note" id="apModeNote"></p>
+        </div>
+        <div class="tablewrap">
+          <table id="apTable" hidden>
+            <thead><tr>
+              <th class="sortable" data-col="name" tabindex="0">Item</th>
+              <th class="sortable n" data-col="qty" tabindex="0">Qty</th>
+              <th class="sortable n" data-col="unit" tabindex="0" title="Type a price to use instead of the market's, for this line only. Click to put the dearest first.">Each</th>
+              <th class="sortable n" data-col="total" tabindex="0" title="Click to put the most valuable first">Total</th>
+              <th></th>
+              <th></th>
+            </tr></thead>
+            <tbody id="apBody"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="apEmpty">Nothing here yet. Add item names below.</p>
+        <p class="note aprough" id="apWarn" hidden></p>
+        <div class="aptotals">
+          <div><span class="dim">Total</span><b id="apTotal">0</b><small id="apRough"></small></div>
+          <div><span class="dim" id="apOfferLabel">Offer at 100%</span><b id="apOffer">0</b></div>
+        </div>
+        <p class="apquote"><output id="apQuote">Nothing to appraise yet</output></p>
+        <div class="row">
+          <button class="btn primary" id="apCopy" disabled>Copy quote</button>
+          <button class="btn" id="apCopyFull" disabled>Copy full list</button>
+          <button class="btn ghost" id="apClear" disabled>Clear</button>
+        </div>
+        <h3 class="aphead"><label for="apAdd">Add items</label></h3>
+        <textarea id="apAdd" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
+        <div class="row">
+          <button class="btn" id="apAddBtn">Add to inventory</button>
+        </div>
+        <p class="note" id="apMsg"></p>
+      </div>
+    </section>
+  </section>
+
+  <section class="view two" id="view-prices" role="tabpanel" aria-labelledby="tab-prices" tabindex="-1" hidden>
+    <section class="panel lead" aria-labelledby="hBook">
+      <div class="panel-head">
+        <h2 id="hBook">Price book</h2>
+        <input class="searchbox" id="bookSearch" type="search" placeholder="Find any item" aria-label="Find any item">
+      </div>
+      <div class="panel-body">
+        <div class="booktable">
+          <table id="bookTable">
+            <thead><tr>
+              <th class="sortable" data-col="name">Item</th>
+              <th class="sortable n" data-col="n">Seen</th>
+              <th class="sortable n" data-col="usual">Usual</th>
+              <th class="sortable n" data-col="low">Lowest</th>
+              <th class="sortable n" data-col="last">Last seen</th>
+              <th class="n">Your price</th>
+              <th class="n">Buy under</th>
+              <th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="empty" id="bookEmpty">Empty. It fills as you open shops, or paste prices below.</p>
+        <p class="note" id="bookHint"></p>
+        <p class="note">Usual is the market price unless tagged <b>you</b> (your price) or <b>seen</b> (your own sightings were lower). The number under it is the tracker's sales count: few sales means slow to resell. Buy under alerts at or below that price, whatever the usual price.</p>
+      </div>
+    </section>
+
+    <div class="side">
+    <section class="panel quiet" aria-labelledby="hMarket">
+      <div class="panel-head"><h2 id="hMarket">Market prices</h2></div>
+      <div class="panel-body stack">
+        <p class="marketline" id="marketAge">None loaded yet.</p>
+        <div class="row">
+          <span class="btn filebtn">Update market prices<input type="file" id="fileMarket" accept=".html,.htm,text/html"></span>
+        </div>
+        <p class="note" id="marketMsg"></p>
+        <p class="note">On <a href="https://meso.watch" target="_blank" rel="noreferrer">meso.watch</a>, once your world's price table has loaded, press ⌘S and save the page as <b>Webpage, Complete</b>, then pick that .html file. The prices stay in this browser.</p>
+      </div>
+    </section>
+    <section class="panel quiet" aria-labelledby="hPaste">
+      <div class="panel-head"><h2 id="hPaste"><label for="pasteBox">Your prices</label></h2></div>
+      <div class="panel-body stack">
+        <textarea id="pasteBox" placeholder="One item per line, price each:&#10;Cape INT Scroll: Lesser, 80k&#10;Tobi Throwing Stars = 1.8m"></textarea>
+        <div class="row">
+          <button class="btn" id="btnPaste">Add as your prices</button>
+        </div>
+        <p class="note" id="pasteMsg"></p>
+      </div>
+    </section>
     </div>
   </section>
+
+  <section class="view cols" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="-1" hidden></section>
 </main>
 
 

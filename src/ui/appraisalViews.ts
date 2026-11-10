@@ -54,11 +54,10 @@ export function appraisalText(r: AppraisalResult): AppraisalText {
   };
 }
 
-/** The pop-out overlay's block: the running total, and the button that starts and pauses scanning. */
+/** The pop-out overlay's block in inventory mode: the running total, and the button that starts and pauses scanning. */
 export function overlayAppraisalHtml(r: AppraisalResult, scanning: boolean, hint: string): string {
-  if (!scanning && !r.kinds) return '';
   const t = appraisalText(r);
-  return `<div class="apbar${scanning ? ' on' : ''}"><div><b>Appraisal</b> <span class="dim">${esc(t.meta)}</span>`
+  return `<div class="apbar${scanning ? ' on' : ''}"><div><b>Your items</b> <span class="dim">${esc(t.meta)}</span>`
     + `<div class="aptot">${esc(t.total)}${r.bulk === 100 ? '' : ` <small>offer ${esc(t.offer)}</small>`}</div></div>`
     + `<button class="btn small${scanning ? '' : ' primary'}" data-act="scan">${scanning ? 'Pause' : 'Scan hovers'}</button></div>`
     + (hint ? `<p class="apnote">${esc(hint)}</p>` : '')
