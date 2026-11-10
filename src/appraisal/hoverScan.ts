@@ -46,9 +46,13 @@ export class HoverScanner<F, I> {
     return { crop, spot: { x: crop.box.px.x, y: crop.box.px.y, pitch: (crop.side ?? 92) * SLOT_PER_ICON } };
   }
 
-  /** The slow part: reads the tooltip and puts the item on the appraisal. */
-  async read(p: HoverPrep<I>): Promise<HoverEvent> {
+  /**
+   * The slow part: reads the tooltip and puts the item on the appraisal. `keep` is asked once the reading is done:
+   * when it says no (the read is no longer wanted), nothing is added and the answer is null.
+   */
+  async read(p: HoverPrep<I>, keep: () => boolean = () => true): Promise<HoverEvent | null> {
     const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
+    if (!keep()) return null;
     this.lastLines = lines;
     return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
   }

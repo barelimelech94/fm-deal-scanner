@@ -255,10 +255,11 @@ export class ScanController<F, I> {
         tip = hovers.prepare(g.frame, { live, area: this.d.itemsArea() });
       }
     } finally { g.done(); }
-    if (list) { try { await shop.read(list); } catch (e) { console.error(e); } }
-    if (tip) { try { event = await hovers.read(tip); } catch (e) { console.error(e); } }
-    // the mode changed while reading: what was read for the old one doesn't stay
-    if (mode === 'deals' && this.mode !== 'deals') session.close();
+    // a check that ends after the mode changed is dropped: what it read is for the mode before
+    const keep = () => this.mode === mode;
+    if (list) { try { await shop.read(list, keep); } catch (e) { console.error(e); } }
+    if (tip) { try { event = await hovers.read(tip, keep); } catch (e) { console.error(e); } }
+    if (!keep()) return;
     this.scans++;
     if (session.version !== shopV) this.emit({ kind: 'shop' });
     if (collector.version !== hoverV || event) this.emit({ kind: 'hover', event });

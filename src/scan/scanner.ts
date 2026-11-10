@@ -105,15 +105,18 @@ export class Scanner<F, I> {
     return { list, tip, opts };
   }
 
-  /** The slow part: reads the copies and updates the shop. */
-  async read(p: Prepared<I>): Promise<void> {
-    await this.readList(p.list, p.opts, !!p.tip);
-    if (p.tip) await this.readTooltip(p.tip);
+  /**
+   * The slow part: reads the copies and updates the shop. `keep` is asked once each reading is done: when it says
+   * no (the read is no longer wanted), the shop is left as it was.
+   */
+  async read(p: Prepared<I>, keep: () => boolean = () => true): Promise<void> {
+    await this.readList(p.list, p.opts, !!p.tip, keep);
+    if (p.tip && keep()) await this.readTooltip(p.tip, keep);
   }
 
   async scan(frame: F, opts: ScanOptions): Promise<void> { await this.read(this.prepare(frame, opts)); }
 
-  private async readList(list: ListCrop<I> | null, opts: ScanOptions, covered: boolean): Promise<void> {
+  private async readList(list: ListCrop<I> | null, opts: ScanOptions, covered: boolean, keep: () => boolean): Promise<void> {
     if (!list) {
       // no list on screen: an open shop counts as closed after two looks, unless a tooltip covers it
       this.lastSig = null;
@@ -130,6 +133,7 @@ export class Scanner<F, I> {
     let lines: OcrLine[] = [];
     try { lines = await this.ocr.recognize(list.image); }
     finally { this.ocrMs = performance.now() - t0; }
+    if (!keep()) return;
     this.lastLines = lines.map((l) => `${Math.round(l.confidence)} ${l.text.trim()}`);
     const rows = parseLines(lines, list.gray);
     const { region, gray } = list;
@@ -138,10 +142,11 @@ export class Scanner<F, I> {
     if (this.session.read(rows, opts.live)) this.hooks.onBook?.();
   }
 
-  private async readTooltip(tip: TipCrop<I>): Promise<void> {
+  private async readTooltip(tip: TipCrop<I>, keep: () => boolean): Promise<void> {
     if (this.tipSig && sigDiff(tip.sig, this.tipSig) < 2) return;   // the same tooltip as last time
     this.tipSig = tip.sig;
     const lines = await this.ocr.recognize(tip.image);
+    if (!keep()) return;
     this.lastTipLines = lines.map((l) => l.text.trim());
     const t = parseTooltip(lines, this.resolveName);
     if (t && this.session.applyTooltip(t, tip.box.anchor)) this.hooks.onBook?.();

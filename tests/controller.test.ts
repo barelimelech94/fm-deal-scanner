@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HoverCollector } from '../src/appraisal/hovers';
 import { HoverScanner } from '../src/appraisal/hoverScan';
 import { CaptureFailed } from '../src/capture/screen';
@@ -40,10 +40,18 @@ function setup(o: { region?: Region | null } = {}) {
   const session = new ShopSession(e), collector = new HoverCollector(e, data);
   const reads: string[] = [];
   let lines: OcrLine[] = SHOP_LINES;
+  /** while set, the next read waits for it to be let go */
+  let held: { done: Promise<void>; go: () => void } | null = null;
   const reader = {
     ready: true,
     async load() {},
-    async recognize(img: Buffer) { reads.push(String(img.length)); return lines; },
+    async recognize(img: Buffer) {
+      reads.push(String(img.length));
+      const h = held;
+      held = null;
+      if (h) await h.done;
+      return lines;
+    },
   };
   const capture = new FakeCapture();
   const ticker = { ms: 0, started: 0, stopped: 0 };
@@ -61,6 +69,8 @@ function setup(o: { region?: Region | null } = {}) {
     e, c, data, session, collector, capture, ticker, changes,
     reads: () => reads.length,
     answer: (l: OcrLine[]) => { lines = l; },
+    /** Holds the next read until the returned function is called. */
+    hold: () => { let go = () => {}; const done = new Promise<void>((r) => { go = r; }); held = { done, go }; return () => go(); },
   };
 }
 
@@ -175,6 +185,43 @@ describe('ScanController', () => {
       c.setMode('deals');
       expect(collector.scanning).toBe(false);
       expect(changes).toContain('hover');
+    });
+
+    it('drops a hover read in inventory that ends after the switch to deals', async () => {
+      const { c, data, collector, changes, reads, answer, hold } = setup();
+      answer(SCROLL_LINES);
+      c.setMode('inventory');
+      await c.useStill(SCROLL);
+      const release = hold();
+      c.setScanning(true);   // starts a check, which waits in the reader
+      await vi.waitFor(() => expect(reads()).toBe(1));
+      c.setMode('deals');
+      const v = collector.version;
+      changes.length = 0;
+      release();
+      await c.tick();
+      expect(data.entries).toEqual([]);
+      expect(collector.version).toBe(v);
+      expect(changes).not.toContain('hover');
+    });
+
+    it('drops a shop read in deals that ends after the switch to inventory', async () => {
+      const { c, e, session, changes, reads, hold } = setup();
+      const release = hold();
+      const reading = c.useStill(SHOP);
+      await vi.waitFor(() => expect(reads()).toBe(1));
+      c.setMode('inventory');
+      const v = session.version;
+      changes.length = 0;
+      release();
+      await reading;
+      await c.tick();
+      expect(session.open).toBe(false);
+      expect(session.rows.size).toBe(0);
+      expect(session.hover).toBeNull();
+      expect(session.version).toBe(v);
+      expect(e.book.items).toEqual({});
+      expect(changes).not.toContain('shop');
     });
 
     it('does nothing when the mode is the same', async () => {
