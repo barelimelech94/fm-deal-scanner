@@ -34,10 +34,17 @@ export interface FetchOptions {
   pause?: number;
 }
 
-/** Every non-cash equip's row, six requests at a time, each tried twice more if it fails. Rows that never arrive are left out. */
-export async function fetchEquips(list: readonly ItemSource[], fetcher: typeof fetch, opts: FetchOptions = {}): Promise<{ wanted: number; rows: EquipRow[] }> {
+/** What fetching the equips got: the rows that arrived, and how many requests failed, with the last one's error. */
+export interface FetchedEquips { wanted: number; rows: EquipRow[]; failed: number; lastError: string }
+
+/**
+ * Every non-cash equip's row, six requests at a time, each tried twice more if it fails. Rows that never arrive
+ * are left out. Every failed request is counted, and the last one's error kept, so a warning can say why.
+ */
+export async function fetchEquips(list: readonly ItemSource[], fetcher: typeof fetch, opts: FetchOptions = {}): Promise<FetchedEquips> {
   const ids = list.filter(isNonCashEquip).map((it) => it.id);
   const rows: EquipRow[] = [];
+  let failed = 0, lastError = '';
   const one = async (id: number): Promise<void> => {
     for (let attempt = 0; attempt <= RETRIES; attempt++) {
       if (attempt) await new Promise((r) => setTimeout(r, (opts.pause ?? 1000) * attempt));
@@ -46,14 +53,17 @@ export async function fetchEquips(list: readonly ItemSource[], fetcher: typeof f
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         rows.push(equipRow(id, await r.json()));
         return;
-      } catch { /* tried again, then left out */ }
+      } catch (e) {   // tried again, then left out
+        failed++;
+        lastError = e instanceof Error ? e.message : String(e);
+      }
     }
   };
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(AT_ONCE, ids.length) }, async () => {
     while (next < ids.length) await one(ids[next++]!);
   }));
-  return { wanted: ids.length, rows: rows.sort((a, b) => a[0] - b[0]) };
+  return { wanted: ids.length, rows: rows.sort((a, b) => a[0] - b[0]), failed, lastError };
 }
 
 /** "7 slots, WAT 60" */
@@ -65,11 +75,12 @@ const describeRow = (row: EquipRow | undefined): string =>
  * Returns whether it wrote, and one line saying what happened (with Traus's values, to check the real data by).
  */
 export async function writeEquips(list: readonly ItemSource[], fetcher: typeof fetch, out: string, opts: FetchOptions = {}): Promise<{ wrote: boolean; message: string }> {
-  const { wanted, rows } = await fetchEquips(list, fetcher, opts);
+  const { wanted, rows, failed, lastError } = await fetchEquips(list, fetcher, opts);
   const name = relative(process.cwd(), out) || out;
   if (!wanted || rows.length < 0.9 * wanted) {
     const kept = existsSync(out) ? `keeping the existing ${name}` : 'the site will work without equip facts';
-    return { wrote: false, message: `got ${rows.length} of ${wanted} equips from ${ITEM_API}; ${kept}` };
+    const why = failed ? ` (${failed} request${failed === 1 ? '' : 's'} failed, the last with: ${lastError})` : '';
+    return { wrote: false, message: `got ${rows.length} of ${wanted} equips from ${ITEM_API}${why}; ${kept}` };
   }
   const file: EquipFile = { source: `${ITEM_API}/{id}`, fetched: new Date().toISOString(), items: rows };
   mkdirSync(dirname(out), { recursive: true });

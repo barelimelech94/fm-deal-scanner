@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, type Settings } from '../src/lib/types';
 import { SETTINGS, settingOf } from '../src/settings/schema';
 import { inputValue, parseInput, SettingsBinder } from '../src/ui/settingsBind';
-import { controlHtml, SETTING_GROUPS, settingId, settingsHtml } from '../src/ui/settingsView';
+import { captureDetails, controlHtml, SETTING_GROUPS, settingId, settingsHtml } from '../src/ui/settingsView';
 import { tabAfterKey, viewFromHash, VIEWS } from '../src/ui/shell';
 
 describe('the Settings view', () => {
@@ -54,6 +54,18 @@ describe('the Settings view', () => {
     expect(controlHtml(settingOf('minSeen'))).toContain('step="1"><span class="unit"></span>');
     expect(controlHtml(settingOf('base'))).toContain('<option value="median">Middle</option><option value="q25">Lower quarter</option>');
     expect(controlHtml(settingOf('sound'))).toContain('type="checkbox" role="switch"');
+  });
+});
+
+describe('the capture details in Troubleshooting', () => {
+  const c = { surface: 'window', size: '1440×900', framesIn: 42, idle: 1000, reader: true, area: 'found' as const };
+  it('says what is shared, how many frames came, the reader and the shop area', () => {
+    expect(captureDetails(c)).toBe('sharing window 1440×900 · 42 frames received · text reader ready · area found automatically');
+    expect(captureDetails({ ...c, surface: 'monitor', reader: false, area: 'unset' })).toBe('sharing whole screen 1440×900 · 42 frames received · text reader loading · area not set');
+  });
+  it('says when no new frame came for a while', () => {
+    expect(captureDetails({ ...c, idle: 12_400, area: 'marked' })).toContain(' · none new for 12s (normal while the screen is still) · ');
+    expect(captureDetails({ ...c, idle: null })).not.toContain('none new');
   });
 });
 

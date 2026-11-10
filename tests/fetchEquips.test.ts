@@ -73,6 +73,8 @@ describe('fetching the equips', () => {
     expect(r.rows).toEqual([[1302012, 7, { WAT: 60 }]]);
     expect(api.calls.get(1302012)).toBe(3);
     expect(api.calls.get(1302013)).toBe(3);
+    // two busy answers for Traus, three resets for the other: every failed request counted, the last one's error kept
+    expect(r).toMatchObject({ failed: 5, lastError: 'reset' });
   });
 });
 
@@ -105,7 +107,10 @@ describe('writing public/equips.json', () => {
     setupDir('old');
     const api = fakeApi((id) => (id >= 1442007 ? null : TRAUS));
     const r = await writeEquips(list, api.fetcher, out(), { pause: 0 });
-    expect(r).toEqual({ wrote: false, message: expect.stringMatching(/^got 8 of 10 equips from https:\/\/maplestory\.io\/api\/MCW\/1\/item; keeping the existing .*equips\.json$/) });
+    expect(r).toEqual({
+      wrote: false,
+      message: expect.stringMatching(/^got 8 of 10 equips from https:\/\/maplestory\.io\/api\/MCW\/1\/item \(6 requests failed, the last with: HTTP 503\); keeping the existing .*equips\.json$/),
+    });
     expect(readFileSync(out(), 'utf8')).toBe('old');
   });
 
@@ -114,7 +119,7 @@ describe('writing public/equips.json', () => {
     const api = fakeApi(() => new TypeError('offline'));
     const r = await writeEquips(list, api.fetcher, out(), { pause: 0 });
     expect(r.wrote).toBe(false);
-    expect(r.message).toMatch(/^got 0 of 10 equips .*; the site will work without equip facts$/);
+    expect(r.message).toMatch(/^got 0 of 10 equips .* \(30 requests failed, the last with: offline\); the site will work without equip facts$/);
     expect(existsSync(out())).toBe(false);
   });
 

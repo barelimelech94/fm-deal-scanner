@@ -5,6 +5,7 @@ import type { Engine } from './engine';
 import type { HoverEvent } from './appraisal/hovers';
 import type { MarketData, Region, Settings, ViewName } from './lib/types';
 import { loadCatalog } from './market/catalog';
+import { loadEquipFacts } from './market/equipFacts';
 import { MarketIndex } from './market/marketIndex';
 import { Reader } from './ocr/reader';
 import { pruneOld } from './pricing/priceBook';
@@ -22,7 +23,7 @@ import { InventoryView } from './ui/inventoryView';
 import { Overlay } from './ui/overlay';
 import { PricesView, tidyBook } from './ui/pricesView';
 import { SettingsBinder } from './ui/settingsBind';
-import { SettingsView } from './ui/settingsView';
+import { captureDetails, SettingsView } from './ui/settingsView';
 import { Shell } from './ui/shell';
 import { Chime } from './ui/sound';
 import { freshDeal, hoverText, overlayHtml } from './ui/views';
@@ -151,16 +152,22 @@ export class App {
     // Prices view's "last seen" and the market prices' age move on
     setInterval(() => { if (!document.hidden) { this.deals.render(true); this.prices.render(true); this.renderOverlay(); } }, 15_000);
     setInterval(() => { if (this.shell.isShown('settings')) this.settingsView.renderTrouble(); }, 1000);
-    void this.loadCatalog();
+    this.loadGameData();
   }
 
-  /** Item ids by name, so items the tracker doesn't list (or all of them, with no tracker page loaded) get pictures. */
-  private async loadCatalog(): Promise<void> {
-    const catalog = await loadCatalog(`${import.meta.env.BASE_URL}items.json`);
-    if (!catalog.size) return;
-    this.engine.market = this.engine.market.withCatalog(catalog);
-    this.data++;
-    this.render();
+  /**
+   * The game data served beside the page, each file as it arrives; a missing one changes nothing. Item ids by
+   * name give items the tracker doesn't list (or all of them, with no tracker page loaded) their pictures. Every
+   * equip's slots and base stats are what the stats read off a tooltip are measured against.
+   */
+  private loadGameData(): void {
+    const base = import.meta.env.BASE_URL;
+    void loadCatalog(`${base}items.json`).then((catalog) => {
+      if (catalog.size) { this.engine.market = this.engine.market.withCatalog(catalog); this.data++; this.render(); }
+    });
+    void loadEquipFacts(`${base}equips.json`).then((facts) => {
+      if (facts.size) { this.engine.facts = facts; this.pricesChanged(); }
+    });
   }
 
   private get settings(): Settings { return this.engine.settings; }
@@ -304,12 +311,8 @@ export class App {
   /** Live capture health, so a broken share is obvious at a glance. */
   private diag(): string {
     if (!this.capture.active) return '';
-    const { surface, size } = this.capture.describe();
-    const idle = this.capture.latestAt ? Math.round((Date.now() - this.capture.latestAt) / 1000) : null;
-    return `sharing ${surface === 'monitor' ? 'whole screen' : surface} ${size} · ${this.capture.framesIn} frames received`
-      + (idle != null && idle > 5 ? ` · none new for ${idle}s (normal while the screen is still)` : '')
-      + ` · text reader ${this.reader.ready ? 'ready' : 'loading'}`
-      + ` · area ${this.controller.autoArea ? (this.scanner.found ? 'found automatically' : 'looking for a shop') : this.region ? 'marked by you' : 'not set'}`;
+    const c = this.capture, area = this.controller.autoArea ? (this.scanner.found ? 'found' : 'looking') : this.region ? 'marked' : 'unset';
+    return captureDetails({ ...c.describe(), framesIn: c.framesIn, idle: c.latestAt ? Date.now() - c.latestAt : null, reader: this.reader.ready, area });
   }
 
   private async openOverlay(): Promise<void> {

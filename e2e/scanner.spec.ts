@@ -119,6 +119,28 @@ test('reads the stats off a hover tooltip', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("measures a hovered item's stats against the game data's slots and base stats", async ({ page }) => {
+  const { errors } = await open(page);
+  // once misread with 9 slots: on its own, the scanner takes that as the most a Traus can have
+  await page.evaluate(() => localStorage.setItem('fmscan.v1.db', JSON.stringify({ items: { traus: { name: 'Traus', manualRef: null, buyUnder: null, s: [], maxSlots: 9 } } })));
+  const hovered = async (facts: number) => {
+    await page.reload();
+    await page.waitForFunction((n) => (window as unknown as { FM: { engine: { facts: Map<number, unknown> } } }).FM.engine.facts.size === n, facts);
+    await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+    await loadShot(page, screenFile('hover.png', hoverOverShop(1, 2560, 1600)));
+    return page.locator('#hoverLine');
+  };
+  await page.route('**/fm-deal-scanner/equips.json', (r) => r.fulfill({ status: 404 }));
+  await expect(await hovered(0)).toContainText('Traus: −2 att, 2 of 9 slots used. Worth about 37,400');
+
+  // the game data says a Traus has 7
+  await page.unroute('**/fm-deal-scanner/equips.json');
+  await page.route('**/fm-deal-scanner/equips.json', (r) => r.fulfill({ contentType: 'application/json', body: readFileSync('tests/fixtures/equips.sample.json') }));
+  await expect(await hovered(9)).toContainText('Traus: −2 att, 7 slots left. Worth about 46,200');
+  // the browser logs the missing file of the first run; nothing else went wrong
+  expect(errors.filter((e) => !e.includes('status of 404'))).toEqual([]);
+});
+
 test('keeps your data from the single-file scanner', async ({ page }) => {
   const { icons } = await open(page);
   const backup = {

@@ -70,6 +70,30 @@ export function settingsHtml(defs: readonly SettingDef[] = SETTINGS): string {
   }).join('') + DATA;
 }
 
+/** What Troubleshooting says of a running capture. */
+export interface CaptureDetails {
+  /** what is shared ("monitor" is the whole screen), and its size */
+  surface: string;
+  size: string;
+  framesIn: number;
+  /** ms since the last new frame, if one came */
+  idle: number | null;
+  /** the text reader is loaded */
+  reader: boolean;
+  /** the shop area: found by itself, still looked for, marked by hand, or to be marked and not yet */
+  area: 'found' | 'looking' | 'marked' | 'unset';
+}
+
+const AREA: Record<CaptureDetails['area'], string> = { found: 'found automatically', looking: 'looking for a shop', marked: 'marked by you', unset: 'not set' };
+
+/** The capture details line in Troubleshooting. */
+export function captureDetails(c: CaptureDetails): string {
+  const idle = c.idle == null ? null : Math.round(c.idle / 1000);
+  return `sharing ${c.surface === 'monitor' ? 'whole screen' : c.surface} ${c.size} · ${c.framesIn} frames received`
+    + (idle != null && idle > 5 ? ` · none new for ${idle}s (normal while the screen is still)` : '')
+    + ` · text reader ${c.reader ? 'ready' : 'loading'} · area ${AREA[c.area]}`;
+}
+
 export interface SettingsViewDeps {
   /** a share or a screenshot is there to mark an area on */
   canScan(): boolean;
