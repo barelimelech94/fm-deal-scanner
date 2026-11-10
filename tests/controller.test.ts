@@ -34,7 +34,7 @@ class FakeCapture implements CaptureSource<Pixels> {
  * The controller with the real scanners, a fake share and a reader that answers what it read before from the
  * fixtures: the shop list for a shop, the scroll's tooltip for anything else. It counts the passes.
  */
-function setup(o: { region?: Region | null } = {}) {
+function setup(o: { region?: Region | null; items?: Region | null } = {}) {
   const e = engine({ items: [...ITEMS, ...HOVER_ITEMS.filter((it) => !ITEMS.some((x) => x.n === it.n))] });
   const data: AppraisalData = { entries: [] };
   const session = new ShopSession(e), collector = new HoverCollector(e, data);
@@ -62,7 +62,7 @@ function setup(o: { region?: Region | null } = {}) {
     shop,
     hovers: new HoverScanner(pixelsAdapter, reader, collector, e),
     shopRegion: () => o.region ?? null,
-    itemsArea: () => null,
+    itemsArea: () => o.items ?? null,
   });
   const changes: ScanChange['kind'][] = [];
   c.on((x) => changes.push(x.kind));
@@ -330,6 +330,30 @@ describe('ScanController', () => {
       expect(reads() - n).toBe(2);
     });
 
+    it('says so when the screen could not be read several checks running, and not after one', async () => {
+      const { c, shop, changes } = setup();
+      await c.useStill(SHOP);
+      const ok = c.status();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const failing = vi.spyOn(shop, 'prepare').mockImplementation(() => { throw new Error('no 2d canvas'); });
+      changes.length = 0;
+      await c.tick(true);
+      await c.tick(true);
+      expect(c.status()).toEqual(ok);   // once or twice: nothing said
+      expect(changes).not.toContain('status');
+      await c.tick(true);
+      expect(c.status()).toEqual({ state: 'busy', html: "<b>Can't read the screen.</b> Stop and start capture again, or reload the page." });
+      expect(changes).toContain('status');
+      expect(logged).toHaveBeenCalledTimes(3);
+      // it reads again: the status says what it reads
+      failing.mockRestore();
+      logged.mockRestore();
+      changes.length = 0;
+      await c.tick(true);
+      expect(c.status()).toMatchObject({ state: 'shop', html: expect.stringContaining('6 listings') });
+      expect(changes).toContain('status');
+    });
+
     it('counts every check', async () => {
       const { c } = setup();
       c.setMode('inventory');
@@ -337,6 +361,49 @@ describe('ScanController', () => {
       const n = c.scans;
       await c.tick();   // not scanning: still a check
       expect(c.scans).toBe(n + 1);
+    });
+  });
+
+  describe('troubleshooting', () => {
+    it("shows what the mode read last: the shop list in deals, your item's tooltip in inventory", async () => {
+      const { c, shop, answer } = setup();
+      expect(c.seen).toBeNull();
+      await c.useStill(SHOP);
+      const list = shop.lastCrop;
+      expect(list).not.toBeNull();
+      expect(c.seen).toBe(list);
+      c.setMode('inventory');
+      expect(c.seen).toBeNull();   // no item read yet: not the shop's list
+      answer(SCROLL_LINES);
+      await c.useStill(SCROLL);
+      c.setScanning(true);
+      await c.tick();
+      expect(c.seen).not.toBeNull();
+      expect(c.seen).not.toBe(list);
+      c.setMode('deals');
+      expect(c.seen).toBe(list);
+    });
+
+    it('says what the mode reads: the shop list and how its area is found, or your items and where', async () => {
+      const shop = setup();
+      expect(shop.c.readTarget()).toBe('shop-looking');
+      await shop.c.useStill(SHOP);
+      expect(shop.c.readTarget()).toBe('shop-found');
+      shop.c.setMode('inventory');
+      expect(shop.c.readTarget()).toBe('paused');
+      shop.c.setScanning(true);
+      expect(shop.c.readTarget()).toBe('items');
+
+      const marked = setup({ region: { x: 0, y: 0, w: 1, h: 1 }, items: { x: 0.5, y: 0.5, w: 0.2, h: 0.2 } });
+      marked.e.settings.area = 'manual';
+      expect(marked.c.readTarget()).toBe('shop-marked');
+      await marked.c.useStill(SCROLL);
+      marked.c.setMode('inventory');
+      marked.c.setScanning(true);
+      expect(marked.c.readTarget()).toBe('items-marked');
+      const unset = setup();
+      unset.e.settings.area = 'manual';
+      expect(unset.c.readTarget()).toBe('shop-unset');
     });
   });
 

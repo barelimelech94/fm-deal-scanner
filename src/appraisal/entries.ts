@@ -58,7 +58,11 @@ export function parseAppraisalLines(text: string): { ok: { name: string; qty: nu
   return { ok, bad };
 }
 
-/** Entries read back from storage or a backup, with anything unusable dropped. */
+/**
+ * Entries read back from storage or a backup, with anything unusable dropped. A line at 1 whose number is not in doubt
+ * is taken as counted: items saved before typed counts were marked would otherwise all ask for their count again.
+ * Nothing tells old data from new, so this goes for every load. A line holding a tooltip is an equip, and is left alone.
+ */
 export function cleanEntries(v: unknown): AppraisalEntry[] {
   if (!Array.isArray(v)) return [];
   const out: AppraisalEntry[] = [];
@@ -69,7 +73,7 @@ export function cleanEntries(v: unknown): AppraisalEntry[] {
     if (typeof x.price === 'number' && x.price > 0) entry.price = x.price;
     if (x.ignored) entry.ignored = true;
     if (x.unsure) entry.unsure = true;
-    if (x.counted) entry.counted = true;
+    if (x.counted || (entry.qty === 1 && !entry.unsure && !entry.tip)) entry.counted = true;
     out.push(entry);
   }
   return out;

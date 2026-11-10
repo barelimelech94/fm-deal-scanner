@@ -1,8 +1,9 @@
 import { esc } from '../lib/format';
-import type { Settings } from '../lib/types';
+import type { ScanMode, Settings } from '../lib/types';
+import type { ReadTarget } from '../scan/controller';
 import { SETTINGS, type SettingDef, type SettingGroup } from '../settings/schema';
 import { $, onFile } from './dom';
-import { setText } from './render';
+import { setHtml, setText } from './render';
 
 /** The groups of the Settings view, in order. `state` (what the page remembers) is not shown. */
 export const SETTING_GROUPS: readonly { group: Exclude<SettingGroup, 'state'>; title: string; sub?: string }[] = [
@@ -46,9 +47,15 @@ const AFTER: Partial<Record<keyof Settings, string>> = {
 /** What closes a group. */
 const END: Partial<Record<SettingGroup, string>> = {
   screen: `<details class="trouble" id="trouble"><summary>Troubleshooting</summary>
-    <div class="seen" id="seenWrap" hidden><canvas id="seenCanvas" width="160" height="120" aria-label="The area the scanner reads"></canvas>
-    <p>This is the part of the screen being read. If it doesn't show the item names and prices, use <b>Mark the shop area</b>.</p></div>
+    <div class="seen" id="seenWrap" hidden><canvas id="seenCanvas" width="160" height="120" aria-label="What the scanner read last"></canvas>
+    <p id="seenNote"></p></div>
     <p class="diag" id="diag">Not capturing.</p></details>`,
+};
+
+/** What the picture in Troubleshooting is, per mode. */
+const SEEN_NOTE: Record<ScanMode, string> = {
+  deals: "This is the part of the screen being read. If it doesn't show the item names and prices, use <b>Mark the shop area</b>.",
+  inventory: "This is the last tooltip read for your items. If it isn't the item you pointed at, use <b>Mark the inventory area</b>.",
 };
 
 const DATA = `<section class="panel quiet" aria-labelledby="hData"><div class="panel-head"><h2 id="hData">Data</h2></div><div class="panel-body">
@@ -80,18 +87,23 @@ export interface CaptureDetails {
   idle: number | null;
   /** the text reader is loaded */
   reader: boolean;
-  /** the shop area: found by itself, still looked for, marked by hand, or to be marked and not yet */
-  area: 'found' | 'looking' | 'marked' | 'unset';
+  /** what the mode reads: the shop list, or your items */
+  target: ReadTarget;
 }
 
-const AREA: Record<CaptureDetails['area'], string> = { found: 'found automatically', looking: 'looking for a shop', marked: 'marked by you', unset: 'not set' };
+const TARGET: Record<ReadTarget, string> = {
+  'shop-found': 'area found automatically', 'shop-looking': 'area looking for a shop', 'shop-marked': 'area marked by you', 'shop-unset': 'area not set',
+  items: 'not reading shops · reading your items anywhere on screen',
+  'items-marked': 'not reading shops · reading your items beside the marked area',
+  paused: 'not reading shops · your items paused',
+};
 
 /** The capture details line in Troubleshooting. */
 export function captureDetails(c: CaptureDetails): string {
   const idle = c.idle == null ? null : Math.round(c.idle / 1000);
   return `sharing ${c.surface === 'monitor' ? 'whole screen' : c.surface} ${c.size} · ${c.framesIn} frames received`
     + (idle != null && idle > 5 ? ` · none new for ${idle}s (normal while the screen is still)` : '')
-    + ` · text reader ${c.reader ? 'ready' : 'loading'} · area ${AREA[c.area]}`;
+    + ` · text reader ${c.reader ? 'ready' : 'loading'} · ${TARGET[c.target]}`;
 }
 
 export interface SettingsViewDeps {
@@ -102,8 +114,9 @@ export interface SettingsViewDeps {
   loadShot(f: File): Promise<void>;
   /** the capture details line; empty while not capturing */
   diag(): string;
-  /** what the scanner read last, for Troubleshooting */
+  /** what the mode's reader read last, for Troubleshooting */
   seen(): (CanvasImageSource & { width: number; height: number }) | null;
+  mode(): ScanMode;
 }
 
 type Picture = CanvasImageSource & { width: number; height: number };
@@ -134,17 +147,19 @@ export class SettingsView {
     this.renderTrouble();
   }
 
-  /** While Troubleshooting is open: the capture details line, and what the scanner saw last when that is new. */
+  /** While Troubleshooting is open: the capture details line, and what the mode's reader read last when that changed. */
   renderTrouble(): void {
     if (!$<HTMLDetailsElement>('trouble').open) return;
     setText($('diag'), this.d.diag() || 'Not capturing.');
+    setHtml($('seenNote'), SEEN_NOTE[this.d.mode()]);
     const src = this.d.seen();
-    if (src && src !== this.drawn) this.drawSeen(src);
+    if (src !== this.drawn) this.drawSeen(src);
   }
 
-  /** What the scanner saw last, small. */
-  private drawSeen(src: Picture): void {
+  /** What the mode's reader read last, small; nothing while it has read nothing. */
+  private drawSeen(src: Picture | null): void {
     this.drawn = src;
+    if (!src) { $('seenWrap').hidden = true; return; }
     const c = $<HTMLCanvasElement>('seenCanvas'), ctx = c.getContext('2d');
     if (!ctx) return;
     const r = Math.min(160 / src.width, 120 / src.height);

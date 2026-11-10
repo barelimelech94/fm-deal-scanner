@@ -12,8 +12,15 @@ export interface Engine {
   now: () => number;
 }
 
-/** What the game data says about an item, found by its id (the tracker's, else the game's item list's). */
+/**
+ * What the game data says about an item, found by its id: the tracker's, else the game's item list's for its name.
+ * That list keeps one id per name, so an id it gives for a name another equip shares with other facts gives none:
+ * the stats are then read as they are without the game data.
+ */
 export function equipFact(e: Engine, key: string): EquipFact | undefined {
-  const id = e.market.iconId(key);
-  return id == null ? undefined : e.facts.get(id);
+  const tracked = e.market.trackerId(key);
+  if (tracked != null) return e.facts.get(tracked);
+  const id = e.market.catalog.get(key)?.id;
+  const fact = id == null ? undefined : e.facts.get(id);
+  return fact?.ambiguous ? undefined : fact;
 }

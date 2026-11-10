@@ -433,6 +433,36 @@ test('sets up your store: the item hovered last stands out with its List at pric
   expect(errors).toEqual([]);
 });
 
+test('keeps what you are typing in List at when a hover comes in meanwhile', async ({ page }) => {
+  test.setTimeout(180_000);
+  const { errors } = await open(page);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(HOVER_TRACKER) });
+  const screen = (name: string) => screenFile(`${name}.png`, placeOn(loadPng(`appraisal/${name}.png`), 1440, 900, 100, 100));
+  const rows = page.locator('#apBody tr'), listAt = rows.first().locator('input[data-field="price"]');
+  await view(page, 'inventory');
+  await loadShot(page, screen('trade-equip'));
+  await page.click('#apScan');
+  await expect(rows).toHaveCount(1);
+  await expect(listAt).toHaveValue('2,000');
+
+  // half way through typing a price, the next item is hovered: what is typed stays, and the hint says what came in
+  await listAt.fill('2,7');
+  await loadShot(page, screen('use-scroll-inventory'));
+  await expect(page.locator('#apHint')).toContainText('Added Overall Armor LUK Scroll: Greater');
+  await expect(listAt).toBeFocused();
+  await expect(listAt).toHaveValue('2,7');
+  await expect(rows).toHaveCount(1);
+  await page.keyboard.type('50');
+
+  // done typing: the price is the line's own, and the hovered item's line shows, highlighted
+  await listAt.press('Tab');
+  await expect(rows).toHaveCount(2);
+  await expect(listAt).toHaveValue('2,750');
+  await expect(rows.first()).toContainText('typed here');
+  await expect(rows.nth(1)).toHaveClass(/\blast\b/);
+  expect(errors).toEqual([]);
+});
+
 test('orders the open shop by a column, most profit first, and remembers it', async ({ page }) => {
   const { errors } = await open(page);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });

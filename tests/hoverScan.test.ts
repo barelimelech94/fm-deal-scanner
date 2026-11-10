@@ -1,13 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { appraise } from '../src/appraisal/appraise';
+import { appraise, needsCount } from '../src/appraisal/appraise';
 import { addEntry, entryFor } from '../src/appraisal/entries';
 import { HoverCollector } from '../src/appraisal/hovers';
 import { AREA_MARGIN, HoverScanner, nearArea } from '../src/appraisal/hoverScan';
 import type { AppraisalData, OcrLine, TooltipRead } from '../src/lib/types';
 import type { Ocr } from '../src/scan/scanner';
-import { hasStats } from '../src/tooltip/statValue';
 import { FIXTURES, loadPng } from './helpers/image';
 import { hoverEngine } from './helpers/hover';
 import { pixelsAdapter } from './helpers/pipeline';
@@ -129,12 +128,6 @@ describe('HoverCollector', () => {
   const at = (x: number, y = 100) => ({ x, y, pitch: 48 });
   const make = () => { const data: AppraisalData = { entries: [] }; return { data, c: new HoverCollector(e, data) }; };
 
-  it('knows an equip from a stack by its tooltip', () => {
-    expect(hasStats(tip('Lemona', true))).toBe(true);
-    expect(hasStats(tip('Red Potion'))).toBe(false);
-    expect(hasStats({ ...tip('Lemona'), remaining: 5 })).toBe(true);
-  });
-
   it('knows an equip from a stack by its id, whatever its tooltip shows', () => {
     const { data, c } = make();
     c.ingest(tip('Lemona'), at(100), 5);              // an equip whose stat lines were not read
@@ -180,6 +173,55 @@ describe('HoverCollector', () => {
     expect(c.ingest(tip('Leaf'), at(305), 12)).toMatchObject({ kind: 'fixed', text: 'Leaf: count is 12' });
     expect(data.entries[1]).toMatchObject({ qty: 12 });
     expect(data.entries[1]!.unsure).toBeUndefined();
+  });
+
+  it('takes a count read off the slot as known, a 1 too, so its line does not ask for one', () => {
+    const { data, c } = make();
+    const asks = () => appraise(e, data.entries, 'fair').lines.map((l) => `${l.name}:${needsCount(l)}`);
+    c.ingest(tip('Red Potion'), at(100), 1);
+    c.ingest(tip('Leaf'), at(400));             // its number not read: asked for
+    c.ingest(tip('Lemona', true), at(700), 1);  // an equip: one item, nothing to ask
+    expect(asks()).toEqual(['Red Potion:false', 'Leaf:true', 'Lemona:false']);
+    expect(data.entries.map((x) => !!x.counted)).toEqual([true, false, false]);
+    c.ingest(tip('Leaf'), at(404), 1);          // the same slot, its number read now
+    expect(asks()).toEqual(['Red Potion:false', 'Leaf:false', 'Lemona:false']);
+  });
+
+  it('asks for the count again when the hover that read it is taken back', () => {
+    const { data, c } = make();
+    addEntry(data.entries, entryFor(e, 'Red Potion'));   // typed in at 1: asked for
+    c.ingest(tip('Red Potion'), at(100), 1);              // another stack of 1, read: 2 in all, known
+    expect(data.entries[0]).toMatchObject({ qty: 2, counted: true });
+    c.undo();
+    expect(data.entries[0]!.qty).toBe(1);
+    expect(data.entries[0]!.counted).toBeUndefined();
+  });
+
+  it('knows the line hovered last, and falls back to the one before when that line goes', () => {
+    const { data, c } = make();
+    expect(c.lastId).toBeNull();
+    const leaf = c.ingest(tip('Leaf'), at(100)).entryId!;
+    const lemona = c.ingest(tip('Lemona', true), at(400)).entryId!;
+    expect(c.lastId).toBe(lemona);
+    // Undo takes Lemona's line away: Leaf was hovered before it
+    c.undo();
+    expect(c.lastId).toBe(leaf);
+    // another stack of Leaf joins its line: still that line
+    const hat = c.ingest(tip('Blue Bamboo Hat', true), at(700)).entryId!;
+    expect(c.lastId).toBe(hat);
+    expect(c.ingest(tip('Leaf'), at(1000), 3).entryId).toBe(leaf);
+    expect(c.lastId).toBe(leaf);
+    // Undo takes that stack back, and the line stays: still the one hovered last
+    c.undo();
+    expect(data.entries.find((x) => x.id === leaf)!.qty).toBe(1);
+    expect(c.lastId).toBe(leaf);
+    // a line removed by hand: the one hovered before it
+    data.entries = data.entries.filter((x) => x.id !== leaf);
+    expect(c.lastId).toBe(hat);
+    // cleared: none
+    data.entries = [];
+    c.forget();
+    expect(c.lastId).toBeNull();
   });
 
   it('names the line a hover added, counted again or fixed', () => {

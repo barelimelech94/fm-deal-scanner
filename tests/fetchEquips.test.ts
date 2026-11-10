@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { equipRow, fetchEquips, isNonCashEquip, writeEquips, type ItemSource } from '../scripts/equips';
-import { parseEquipFacts } from '../src/market/equipFacts';
+import { ambiguousIds, equipRow, fetchEquips, isNonCashEquip, writeEquips, type ItemSource } from '../scripts/equips';
+import { parseEquipFacts, type EquipRow } from '../src/market/equipFacts';
 
 const equip = (id: number, o: Partial<ItemSource> = {}): ItemSource =>
   ({ id, name: `Item ${id}`, isCash: false, typeInfo: { overallCategory: 'Equip', category: 'One-Handed Weapon' }, ...o });
@@ -47,6 +47,29 @@ describe('one equip from the game data', () => {
   it('has no slot count when the game data gives none', () => {
     expect(equipRow(1122000, { metaInfo: { incMDD: 3 } })).toEqual([1122000, null, { MDD: 3 }]);
     expect(equipRow(1122001, {})).toEqual([1122001, null, {}]);
+  });
+});
+
+describe('equips that share a name', () => {
+  it('marks every equip whose name another non-cash equip shares with other slots or base stats', () => {
+    const list = [
+      equip(1040000, { name: 'Blue Overall' }), equip(1041000, { name: 'Blue Overall' }),   // other base stats
+      equip(1060000, { name: 'Brown Pants' }), equip(1061000, { name: 'brown  pants' }),    // other slots
+      equip(1302000, { name: 'Sword' }), equip(1302999, { name: 'Sword' }),                 // the same facts: either will do
+      equip(1050000, { name: 'Robe' }), equip(1051000, { name: 'Robe' }), equip(1052000, { name: 'Robe' }),   // two agree, one does not
+      equip(1442000, { name: 'Axe' }), equip(1702000, { name: 'Axe', isCash: true }),     // a cash one is not an equip with facts
+      equip(1072000, { name: 'Boots' }), equip(1073000, { name: 'Boots' }),               // one never arrived: nothing to tell them apart by
+    ];
+    const rows: EquipRow[] = [
+      [1040000, 10, { STR: 1 }], [1041000, 10, { DEX: 1 }],
+      [1060000, 7, { PDD: 10 }], [1061000, 5, { PDD: 10 }],
+      [1302000, 7, { WAT: 17 }], [1302999, 7, { WAT: 17 }],
+      [1050000, 10, { INT: 2 }], [1051000, 10, { INT: 2 }], [1052000, 10, { INT: 3 }],
+      [1442000, 7, { WAT: 20 }],
+      [1072000, 5, { PDD: 3 }],
+    ];
+    expect(ambiguousIds(list, rows)).toEqual([1040000, 1041000, 1050000, 1051000, 1052000, 1060000, 1061000]);
+    expect(ambiguousIds(list.slice(4, 6), rows)).toEqual([]);
   });
 });
 
@@ -94,13 +117,25 @@ describe('writing public/equips.json', () => {
     const api = fakeApi((id) => (id === 1302012 ? TRAUS : id === 1442008 ? null : { metaInfo: { incWAT: 30 } }));
     const r = await writeEquips(list, api.fetcher, out(), { pause: 0 });
     expect(r.wrote).toBe(true);
-    expect(r.message).toMatch(/^wrote 9 equips to .*equips\.json \(1 with upgrade slots\); Traus \(1302012\): 7 slots, WAT 60$/);
+    expect(r.message).toMatch(/^wrote 9 equips to .*equips\.json \(1 with upgrade slots, 0 sharing a name with other facts\); Traus \(1302012\): 7 slots, WAT 60$/);
     const file = JSON.parse(readFileSync(out(), 'utf8'));
-    expect(file).toMatchObject({ source: 'https://maplestory.io/api/MCW/1/item/{id}', items: expect.any(Array) });
+    expect(file).toMatchObject({ source: 'https://maplestory.io/api/MCW/1/item/{id}', items: expect.any(Array), ambiguous: [] });
     expect(Date.parse(file.fetched)).not.toBeNaN();
     expect(file.items[0]).toEqual([1302012, 7, { WAT: 60 }]);
     expect(file.items[1]).toEqual([1442000, null, { WAT: 30 }]);
     expect(parseEquipFacts(file).get(1302012)).toEqual({ slots: 7, base: { att: 60 } });
+  });
+
+  it('says which equips share a name with another that has other facts, so the site can tell', async () => {
+    setupDir();
+    const api = fakeApi((id) => (id === 1302012 ? TRAUS : { metaInfo: { tuc: 7, incWAT: id === 1442001 ? 31 : 30 } }));
+    const shared = list.map((it) => (it.id === 1442000 || it.id === 1442001 ? { ...it, name: 'Axe' } : it));
+    const r = await writeEquips(shared, api.fetcher, out(), { pause: 0 });
+    expect(r.message).toContain('(10 with upgrade slots, 2 sharing a name with other facts)');
+    const file = JSON.parse(readFileSync(out(), 'utf8'));
+    expect(file.ambiguous).toEqual([1442000, 1442001]);
+    expect(parseEquipFacts(file).get(1442001)).toEqual({ slots: 7, base: { att: 31 }, ambiguous: true });
+    expect(parseEquipFacts(file).get(1442002)).toEqual({ slots: 7, base: { att: 30 } });
   });
 
   it('keeps the existing file when fewer than 90 % arrive', async () => {
@@ -128,6 +163,6 @@ describe('writing public/equips.json', () => {
     const api = fakeApi((id) => (id === 1302012 ? null : { metaInfo: { tuc: 7 } }));
     const many = [...list, ...Array.from({ length: 10 }, (_, i) => equip(1442100 + i))];
     const r = await writeEquips(many, api.fetcher, out(), { pause: 0 });
-    expect(r.message).toMatch(/\(19 with upgrade slots\); Traus \(1302012\): missing$/);
+    expect(r.message).toMatch(/\(19 with upgrade slots, 0 sharing a name with other facts\); Traus \(1302012\): missing$/);
   });
 });

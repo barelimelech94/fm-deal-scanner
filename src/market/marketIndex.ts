@@ -45,11 +45,13 @@ export class MarketIndex {
   /** the key of the item's full name, for a short-name key */
   primaryKey(key: string): string { const m = this.byKey.get(key); return m ? norm(m.n) : key; }
   get size(): number { return this.primary.length; }
-  /** The item id its picture is under: the tracker's, else the game data's for that exact name. */
-  iconId(key: string): number | null {
+  /** The item id the tracker lists the item under, when it lists it. */
+  trackerId(key: string): number | null {
     const mk = this.byKey.get(key);
-    return (mk && itemNumber(mk.id)) ?? this.catalog.get(key)?.id ?? null;
+    return (mk && itemNumber(mk.id)) ?? null;
   }
+  /** The item id its picture is under: the tracker's, else the game data's for that exact name. */
+  iconId(key: string): number | null { return this.trackerId(key) ?? this.catalog.get(key)?.id ?? null; }
   /** The real name of the item a key is filed under, from the tracker or the game data. */
   knownName(key: string): string | null { return this.byKey.get(key)?.n ?? this.catalog.get(key)?.name ?? null; }
   /** The game-data item a name read off the screen means, if exactly one is that close. */

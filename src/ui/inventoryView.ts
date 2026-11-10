@@ -35,7 +35,7 @@ export interface InventoryDeps {
   overlay(): void;
 }
 
-const CLEAR_LABEL = 'Clear';
+const CLEAR_LABEL = 'Clear', CLEAR_ASK = 'Click again to clear';
 
 /**
  * The Inventory view: your items, added by hovering them or by name, what they are worth, what to list each at in
@@ -47,8 +47,6 @@ export class InventoryView {
   private clearArmed = 0;
   private hint = '';
   private hintWarn = false;
-  /** the line the last hover added to, counted again or fixed: highlighted */
-  private lastId: string | null = null;
   /** show only the stacks that still need a count */
   private onlyNeedCount = false;
   /** a hover just came in: its row is scrolled into view on the next draw */
@@ -92,7 +90,7 @@ export class InventoryView {
 
   /** What the pop-out overlay shows of your items. */
   glance(): InventoryGlance {
-    return inventoryGlance(this.result(), { lastId: this.lastId, storeAdjust: this.settings.storeAdjust, market: this.d.engine.market, hint: this.hint });
+    return inventoryGlance(this.result(), { lastId: this.collector.lastId, storeAdjust: this.settings.storeAdjust, market: this.d.engine.market, hint: this.hint });
   }
 
   private save(): void { this.edits++; this.d.store.saveAppraisal(this.data); }
@@ -116,13 +114,12 @@ export class InventoryView {
     this.render();
   }
 
-  /** A hover was read: say what it did, and show its line, highlighted. */
+  /** A hover was read: say what it did, and show its line, highlighted (once you are done typing in a box). */
   showEvent(ev: HoverEvent): void {
     if (ev.kind === 'added' || ev.kind === 'fixed' || ev.kind === 'undone') this.save();
-    if (ev.entryId) { this.lastId = ev.entryId; this.reveal = true; }
-    if (ev.kind === 'undone' && !this.find(this.lastId ?? undefined)) this.lastId = null;
+    if (ev.entryId) this.reveal = true;
     this.setHint(ev.text, !!ev.warn);
-    this.render({ overTyping: true });
+    this.render();
   }
 
   /** A line changed here: kept, drawn, and shown in the overlay. */
@@ -170,27 +167,32 @@ export class InventoryView {
       t.blur();
       this.changed();
     });
-    // Enter in a Count box puts the count on its line and moves to the next line's Count box
+    // what waited while you typed in a box is drawn once focus has left the table (a change made is drawn at once)
+    table.addEventListener('focusout', (e) => {
+      if (!table.contains(e.relatedTarget as Node | null)) setTimeout(() => this.render());
+    });
+    // Enter in a Count box puts the count on its line and moves to the next line's Count box; after the last one,
+    // to the filter button while the filter is on, else it stays on the line
     table.addEventListener('keydown', (e) => {
       const t = e.target as HTMLInputElement;
       if (e.key !== 'Enter' || t.dataset?.field !== 'qty') return;
       e.preventDefault();
+      const countBox = (id: string | undefined) => (id ? table.querySelector<HTMLInputElement>(`input[data-field="qty"][data-id="${CSS.escape(id)}"]`) : null);
       const boxes = [...table.querySelectorAll<HTMLInputElement>('input[data-field="qty"]')];
-      const next = boxes[boxes.indexOf(t) + 1]?.dataset.id;
+      const next = boxes[boxes.indexOf(t) + 1]?.dataset.id, id = t.dataset.id;
       if (!this.commit(t)) return;
       this.changed();
-      const box = next && table.querySelector<HTMLInputElement>(`input[data-field="qty"][data-id="${CSS.escape(next)}"]`);
+      const box = countBox(next);
       if (box) { box.focus(); box.select(); }
+      else if (this.onlyNeedCount) $('apNeedCount').focus();
+      else countBox(id)?.focus();
     });
     table.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('button[data-act]');
       const entry = b && this.find(b.dataset.id);
       if (!b || !entry) return;
       if (b.dataset.act === 'skip') entry.ignored = !entry.ignored || undefined;
-      else {
-        this.data.entries = this.data.entries.filter((x) => x !== entry);
-        if (this.lastId === entry.id) this.lastId = null;
-      }
+      else this.data.entries = this.data.entries.filter((x) => x !== entry);
       this.changed();
     });
 
@@ -207,22 +209,26 @@ export class InventoryView {
 
     $('apCopy').addEventListener('click', () => void this.copy(offerText(this.result()), 'Copied the offer.'));
     $('apCopyStore').addEventListener('click', () => void this.copy(storePricesText(this.result(), this.settings.storeAdjust), 'Copied the store prices.'));
-    const clear = $('apClear');
+    const clear = $('apClear'), msg = $('apMsg');
     clear.addEventListener('click', () => {
       if (!this.data.entries.length) return;
       if (Date.now() - this.clearArmed > 4000) {
+        // it asks first, on the button, and says so in the status message for a screen reader
         this.clearArmed = Date.now();
-        clear.textContent = 'Click again to clear';
-        setTimeout(() => { clear.textContent = CLEAR_LABEL; }, 4000);
+        clear.textContent = CLEAR_ASK;
+        msg.textContent = `${CLEAR_ASK}.`;
+        setTimeout(() => {
+          clear.textContent = CLEAR_LABEL;
+          if (msg.textContent === `${CLEAR_ASK}.`) msg.textContent = '';
+        }, 4000);
         return;
       }
       this.data.entries = [];
       this.collector.forget();
-      this.lastId = null;
       this.onlyNeedCount = false;
       this.clearArmed = 0; clear.textContent = CLEAR_LABEL;
       this.changed();
-      $('apMsg').textContent = 'Cleared.';
+      msg.textContent = 'Cleared.';
     });
   }
 
@@ -234,8 +240,8 @@ export class InventoryView {
 
   /**
    * Draws the view while it is shown, when your items, the hovers or the prices changed since it last drew.
-   * `force` draws anyway (it was just shown); `overTyping` draws the table even with a box in it focused (a hover
-   * or a change made in the table). Only what differs is written.
+   * `force` draws anyway (it was just shown); `overTyping` draws the table even with a box in it focused (a change
+   * made in the table). Otherwise the table waits while you type in one of its boxes. Only what differs is written.
    */
   render(o: { force?: boolean; overTyping?: boolean } = {}): void {
     if (!this.d.shown()) return;
@@ -274,7 +280,7 @@ export class InventoryView {
     setText($('apStore'), t.store);
     setText($('apLeft'), t.left);
     const body = $('apBody');
-    setHtml(body, inventoryRowsHtml(lines, this.d.engine.market, { storeAdjust: adjust, lastId: this.lastId, failed: this.d.failed }));
+    setHtml(body, inventoryRowsHtml(lines, this.d.engine.market, { storeAdjust: adjust, lastId: this.collector.lastId, failed: this.d.failed }));
     setHidden($('apEmpty'), lines.length > 0);
     setHidden($('apTable'), !lines.length);
     if (this.reveal) {

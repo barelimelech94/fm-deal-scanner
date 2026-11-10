@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, relative } from 'node:path';
 import { ICON_REGION, ICON_VERSION } from '../src/icons';
+import { norm } from '../src/lib/text';
 import type { CatalogSource } from '../src/market/catalog';
 import { GAME_STATS, type EquipFile, type EquipRow } from '../src/market/equipFacts';
 
@@ -24,6 +25,26 @@ export function equipRow(id: number, detail: unknown): EquipRow {
     if (typeof v === 'number' && Number.isFinite(v) && v !== 0) stats[key] = v;
   }
   return [id, Number.isInteger(meta.tuc) && (meta.tuc as number) >= 0 ? (meta.tuc as number) : null, stats];
+}
+
+/** An equip's slots and base stats as one string, so two equips' facts can be compared. */
+const factKey = ([, slots, stats]: EquipRow): string => JSON.stringify([slots, Object.entries(stats).sort(([a], [b]) => (a < b ? -1 : 1))]);
+
+/**
+ * The equips that can't be told apart by their name: another non-cash equip has the same name and other upgrade slots
+ * or base stats. The site's item list keeps one id per name (src/market/catalog.ts), so for such a name it could take
+ * one equip's facts for the other's. An equip whose row never arrived has nothing to compare, and is left out.
+ */
+export function ambiguousIds(list: readonly ItemSource[], rows: readonly EquipRow[]): number[] {
+  const facts = new Map(rows.map((r) => [r[0], factKey(r)]));
+  const byName = new Map<string, number[]>();
+  for (const it of list) {
+    const k = norm(it.name ?? '');
+    if (k && isNonCashEquip(it) && facts.has(it.id)) byName.set(k, [...(byName.get(k) ?? []), it.id]);
+  }
+  const out: number[] = [];
+  for (const ids of byName.values()) if (new Set(ids.map((id) => facts.get(id))).size > 1) out.push(...ids);
+  return out.sort((a, b) => a - b);
 }
 
 const AT_ONCE = 6, RETRIES = 2;
@@ -82,9 +103,14 @@ export async function writeEquips(list: readonly ItemSource[], fetcher: typeof f
     const why = failed ? ` (${failed} request${failed === 1 ? '' : 's'} failed, the last with: ${lastError})` : '';
     return { wrote: false, message: `got ${rows.length} of ${wanted} equips from ${ITEM_API}${why}; ${kept}` };
   }
-  const file: EquipFile = { source: `${ITEM_API}/{id}`, fetched: new Date().toISOString(), items: rows };
+  const ambiguous = ambiguousIds(list, rows);
+  const file: EquipFile = { source: `${ITEM_API}/{id}`, fetched: new Date().toISOString(), items: rows, ambiguous };
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(file));
   const slotted = rows.filter((r) => r[1] != null).length;
-  return { wrote: true, message: `wrote ${rows.length} equips to ${name} (${slotted} with upgrade slots); Traus (${TRAUS}): ${describeRow(rows.find((r) => r[0] === TRAUS))}` };
+  return {
+    wrote: true,
+    message: `wrote ${rows.length} equips to ${name} (${slotted} with upgrade slots, ${ambiguous.length} sharing a name with other facts); `
+      + `Traus (${TRAUS}): ${describeRow(rows.find((r) => r[0] === TRAUS))}`,
+  };
 }

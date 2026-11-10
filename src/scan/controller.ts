@@ -49,6 +49,12 @@ export interface ControllerDeps<F, I> {
  */
 export type ScanChange = { kind: 'shop' } | { kind: 'hover'; event: HoverEvent | null } | { kind: 'status' } | { kind: 'checked' };
 
+/**
+ * What a check reads now. Deals: the shop list, its area found by itself, still looked for, marked by hand, or to
+ * be marked and not yet. Inventory: your items' tooltips anywhere, or beside the marked area, or nothing while paused.
+ */
+export type ReadTarget = 'shop-found' | 'shop-looking' | 'shop-marked' | 'shop-unset' | 'items' | 'items-marked' | 'paused';
+
 export type StatusState = 'idle' | 'busy' | 'watching' | 'shop';
 /** The status line: a state for its dot, and the words, as HTML. */
 export interface ScanStatus { state: StatusState; html: string }
@@ -57,6 +63,9 @@ const IDLE = '<b>Not capturing.</b> Press Start capture and pick the MapleStory 
 const PREVIEW = 'Screen capture is blocked because this page is open inside a preview or frame. Open it in its own Chrome tab.';
 const MACPERM = 'macOS refused the capture. In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn Chrome off and on again, then <b>quit Chrome with ⌘Q</b> and reopen it. Chrome only picks up that setting after a full restart.';
 const READER_FAILED = 'The text reader failed to load. Check your internet connection and reload this page.';
+const CANT_READ = "<b>Can't read the screen.</b> Stop and start capture again, or reload the page.";
+/** Checks in a row whose frame could not be grabbed or made ready to read, before the status line says so. */
+const FAILS_TO_TELL = 3;
 
 /** Why a capture could not start, in words the person can act on. */
 function captureErrorText(e: CaptureFailed): string {
@@ -85,6 +94,8 @@ export class ScanController<F, I> {
    * screenshot was picked. A check that ends in another generation than it began in is dropped.
    */
   private generation = 0;
+  /** checks in a row whose frame could not be grabbed or made ready to read */
+  private failures = 0;
   private loading = false;
   /** a screenshot picked with "Test with a screenshot", read instead of the share */
   private still: F | null = null;
@@ -106,6 +117,15 @@ export class ScanController<F, I> {
   get autoArea(): boolean { return this.d.engine.settings.area !== 'manual'; }
   /** in deals mode, with the area to be marked by hand and none marked yet: nothing can be read */
   get needsShopArea(): boolean { return this.mode === 'deals' && !this.autoArea && !this.d.shopRegion(); }
+
+  /** For troubleshooting: what the mode's reader read last, the shop's list or your item's tooltip. */
+  get seen(): I | null { return this.mode === 'inventory' ? this.d.hovers.lastCrop : this.d.shop.lastCrop; }
+
+  /** For troubleshooting: what a check reads now. */
+  readTarget(): ReadTarget {
+    if (this.mode === 'inventory') return !this.d.collector.scanning ? 'paused' : this.d.itemsArea() ? 'items-marked' : 'items';
+    return this.autoArea ? (this.d.shop.found ? 'shop-found' : 'shop-looking') : this.d.shopRegion() ? 'shop-marked' : 'shop-unset';
+  }
 
   on(listener: (c: ScanChange) => void): void { this.listeners.push(listener); }
   private emit(c: ScanChange): void { for (const l of this.listeners) l(c); }
@@ -266,7 +286,13 @@ export class ScanController<F, I> {
           tip = hovers.prepare(g.frame, { live, area: this.d.itemsArea() });
         }
       } finally { g.done(); }
-    } catch (e) { console.error(e); return; }
+    } catch (e) {
+      // once is nothing to worry about; several checks in a row are, and the status line says so
+      console.error(e);
+      if (++this.failures === FAILS_TO_TELL) this.statusChanged();
+      return;
+    }
+    this.failures = 0;   // the status line says what it reads again at the end of the check
     // a check that ends after a reset (see `generation`) is dropped: what it read is for what was there before
     const keep = () => this.generation === generation;
     if (list) { try { await shop.read(list, keep); } catch (e) { console.error(e); } }
@@ -283,6 +309,7 @@ export class ScanController<F, I> {
   status(): ScanStatus {
     if (this.loading) return { state: 'busy', html: 'Loading the text reader (about 3 MB, first time only)…' };
     if (!this.canScan) return { state: 'idle', html: IDLE };
+    if (this.failures >= FAILS_TO_TELL) return { state: 'busy', html: CANT_READ };
     const shot = !this.capturing;
     if (this.mode === 'inventory') {
       return this.d.collector.scanning

@@ -239,8 +239,18 @@ describe('need a count', () => {
   });
 
   it('keeps the counted mark through storage', () => {
-    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 1, counted: true }])[0]!.counted).toBe(true);
-    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 1 }])[0]!.counted).toBeUndefined();
+    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 3, counted: true }])[0]!.counted).toBe(true);
+    expect(cleanEntries([{ id: 'a', key: 'red potion', name: 'Red Potion', qty: 3 }])[0]!.counted).toBeUndefined();
+  });
+
+  it('takes a stack saved at 1 as counted, so items saved before the mark existed do not all ask for a count', () => {
+    const saved = cleanEntries([
+      { id: 'a', key: 'red potion', name: 'Red Potion', qty: 1 },
+      { id: 'b', key: 'leaf', name: 'Leaf', qty: 1, unsure: true },   // a hovered slot whose number was not read: still asked
+      { id: 'c', key: 'gloves attack scroll: greater', name: 'Gloves Attack Scroll: Greater', qty: 4 },
+    ]);
+    expect(saved.map((x) => x.counted)).toEqual([true, undefined, undefined]);
+    expect(saved.map((x) => needsCount(appraiseEntry(e, x, 'fair')))).toEqual([false, true, false]);
   });
 });
 

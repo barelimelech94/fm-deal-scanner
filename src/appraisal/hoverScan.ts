@@ -30,6 +30,7 @@ export interface HoverScanOptions {
 export class HoverScanner<F, I> {
   /** for troubleshooting: what the reader saw last */
   lastLines: string[] = [];
+  lastCrop: I | null = null;
 
   constructor(
     private readonly adapter: FrameAdapter<F, I>,
@@ -54,6 +55,7 @@ export class HoverScanner<F, I> {
     const { tip, lines } = await readHover(this.ocr, p.crop, tooltipResolver(this.e));
     if (!keep()) return null;
     this.lastLines = lines;
+    this.lastCrop = p.crop.image;
     return tip ? this.collector.ingest(tip, p.spot) : this.collector.unreadable(lines);
   }
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { OcrLine } from '../src/lib/types';
 import { cleanName, isGreyed, parseLines, priceGap, PRICE_RE } from '../src/listing/parseListing';
 import { parseTooltip, statKind, statNumbers, type ResolveName } from '../src/tooltip/parseTooltip';
-import { slotsForType, statSig, statValue } from '../src/tooltip/statValue';
+import { hasStats, slotsForType, statSig, statValue } from '../src/tooltip/statValue';
 import { resolveKey } from '../src/market/matching';
 import { FIXTURES } from './helpers/image';
 import { CATALOG, FACTS, market } from './helpers/market';
@@ -317,5 +317,12 @@ describe('statValue', () => {
   it('names a copy by its stats', () => {
     expect(statSig(tip([['att', 1, 62, 60]], 7))).toBe('att:62/60|7');
     expect(statSig(tip([['att', 1, 62, 60]], null))).toBe('att:62/60|');
+  });
+
+  it('knows an equip from a stack by its tooltip: stat lines or upgrade slots read', () => {
+    expect(hasStats(tip([['INT', 0.5, 3, 2]], 7))).toBe(true);
+    expect(hasStats(tip([], 5))).toBe(true);
+    expect(hasStats(tip([], null))).toBe(false);
+    expect(hasStats(null)).toBe(false);
   });
 });

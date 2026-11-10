@@ -19,7 +19,8 @@ export interface HoverSpot { x: number; y: number; pitch: number }
 
 /** A slot hovered before: remembered so hovering it again counts it once. */
 interface Slot { key: string; sig: string; x: number; y: number; entryId: string; qty: number; unsure: boolean }
-interface Undo { slot: Slot; created: boolean }
+/** A hover to take back: its slot, whether it made the line, and whether its count read made the line's count known. */
+interface Undo { slot: Slot; created: boolean; counted: boolean }
 
 const MAX_SLOTS = 600;
 
@@ -35,10 +36,18 @@ export class HoverCollector {
   private on = false;
   private slots: Slot[] = [];
   private undos: Undo[] = [];
+  /** the lines hovered, by id, each once, the latest last */
+  private hovered: string[] = [];
   private waiting: Float32Array | null = null;
   private done: Float32Array | null = null;
 
   constructor(private readonly e: Engine, private readonly data: AppraisalData) {}
+
+  /** The line hovered last that is still there: once it is taken back or removed, the one hovered before it. */
+  get lastId(): string | null {
+    for (let i = this.hovered.length - 1; i >= 0; i--) if (this.entryOf(this.hovered[i]!)) return this.hovered[i]!;
+    return null;
+  }
 
   /** hovers count only while this is on */
   get scanning(): boolean { return this.on; }
@@ -50,6 +59,11 @@ export class HoverCollector {
 
   private event(ev: HoverEvent): HoverEvent {
     this.version++;
+    const id = ev.entryId;
+    if (id) {
+      this.hovered = this.hovered.filter((x) => x !== id);
+      if (this.hovered.push(id) > MAX_SLOTS) this.hovered.shift();
+    }
     return (this.last = ev);
   }
 
@@ -76,14 +90,17 @@ export class HoverCollector {
   ingest(tip: TooltipRead, spot: HoverSpot, count: number | null = null): HoverEvent {
     const made = entryFor(this.e, tip.name), equip = isEquipItem(this.e, made.key, tip), sig = statSig(tip);
     if (equip) made.tip = tip; else made.qty = clampQty(count ?? 1);
+    /** a stack whose number was read off its slot: its count is known, a 1 too */
+    const read = !equip && count != null;
     const near = (s: Slot) => Math.abs(s.x - spot.x) < spot.pitch * 0.75 && Math.abs(s.y - spot.y) < spot.pitch * 0.75;
     const known = this.slots.find((s) => s.key === made.key && s.sig === sig && near(s));
     const there = known && this.entryOf(known.entryId);
 
     if (known && there) {
       // the same slot again; a count that could not be read before may be readable now
-      if (!equip && count != null && (known.unsure || count !== known.qty)) {
+      if (read && (known.unsure || count !== known.qty)) {
         there.qty = clampQty(there.qty - known.qty + count);
+        there.counted = true;
         known.qty = count; known.unsure = false;
         this.refresh(there);
         return this.event({ kind: 'fixed', text: `${made.name}: count is ${count}`, entryId: there.id });
@@ -94,10 +111,12 @@ export class HoverCollector {
 
     const unsure = !equip && count == null;
     const entry = addEntry(this.data.entries, made);
+    const counted = read && !entry.counted;
+    if (counted) entry.counted = true;
     const slot: Slot = { key: made.key, sig, x: spot.x, y: spot.y, entryId: entry.id, qty: made.qty, unsure };
     this.slots.push(slot);
     if (this.slots.length > MAX_SLOTS) this.slots.shift();
-    this.undos.push({ slot, created: entry === made });
+    this.undos.push({ slot, created: entry === made, counted });
     this.refresh(entry);
     return this.event({
       kind: 'added', text: `Added ${made.name}${made.qty > 1 ? ` ×${made.qty}` : ''}${unsure ? ': type how many you have in its Count box' : ''}`, warn: unsure, entryId: entry.id,
@@ -125,6 +144,7 @@ export class HoverCollector {
     const entry = this.entryOf(u.slot.entryId);
     if (entry) {
       entry.qty = clampQty(entry.qty - u.slot.qty);
+      if (u.counted) delete entry.counted;
       if (u.created || entry.qty < 1) this.data.entries = this.data.entries.filter((x) => x !== entry);
       else this.refresh(entry);
     }
@@ -134,5 +154,5 @@ export class HoverCollector {
   get canUndo(): boolean { return this.undos.length > 0; }
 
   /** The appraisal was cleared: forget the slots seen. */
-  forget(): void { this.slots = []; this.undos = []; this.last = null; this.version++; }
+  forget(): void { this.slots = []; this.undos = []; this.hovered = []; this.last = null; this.version++; }
 }

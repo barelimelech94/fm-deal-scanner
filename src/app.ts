@@ -105,7 +105,8 @@ export class App {
       markItems: () => void this.calibration.open('items'),
       loadShot: (f) => this.loadScreenshot(f),
       diag: () => this.diag(),
-      seen: () => this.scanner.lastCrop,
+      seen: () => this.controller.seen,
+      mode: () => this.controller.mode,
     });
     this.dataGroup = new DataGroup({
       engine: e, regions: () => ({ region: this.region, itemsRegion: this.itemsRegion }),
@@ -307,7 +308,7 @@ export class App {
   /** Live capture health, so a broken share is obvious at a glance. */
   private diag(): string {
     if (!this.capture.active) return '';
-    const c = this.capture, area = this.controller.autoArea ? (this.scanner.found ? 'found' : 'looking') : this.region ? 'marked' : 'unset';
-    return captureDetails({ ...c.describe(), framesIn: c.framesIn, idle: c.latestAt ? Date.now() - c.latestAt : null, reader: this.reader.ready, area });
+    const c = this.capture;
+    return captureDetails({ ...c.describe(), framesIn: c.framesIn, idle: c.latestAt ? Date.now() - c.latestAt : null, reader: this.reader.ready, target: this.controller.readTarget() });
   }
 }

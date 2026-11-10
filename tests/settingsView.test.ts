@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, type Settings } from '../src/lib/types';
+import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_SETTINGS, type ScanMode, type Settings } from '../src/lib/types';
 import { SETTINGS, settingOf } from '../src/settings/schema';
 import { inputValue, parseInput, SettingsBinder } from '../src/ui/settingsBind';
-import { captureDetails, controlHtml, SETTING_GROUPS, settingId, settingsHtml } from '../src/ui/settingsView';
+import { captureDetails, controlHtml, SETTING_GROUPS, settingId, settingsHtml, SettingsView } from '../src/ui/settingsView';
 import { tabAfterKey, viewFromHash, VIEWS } from '../src/ui/shell';
 
 describe('the Settings view', () => {
@@ -58,14 +58,47 @@ describe('the Settings view', () => {
 });
 
 describe('the capture details in Troubleshooting', () => {
-  const c = { surface: 'window', size: '1440×900', framesIn: 42, idle: 1000, reader: true, area: 'found' as const };
+  const c = { surface: 'window', size: '1440×900', framesIn: 42, idle: 1000, reader: true, target: 'shop-found' as const };
   it('says what is shared, how many frames came, the reader and the shop area', () => {
     expect(captureDetails(c)).toBe('sharing window 1440×900 · 42 frames received · text reader ready · area found automatically');
-    expect(captureDetails({ ...c, surface: 'monitor', reader: false, area: 'unset' })).toBe('sharing whole screen 1440×900 · 42 frames received · text reader loading · area not set');
+    expect(captureDetails({ ...c, surface: 'monitor', reader: false, target: 'shop-unset' })).toBe('sharing whole screen 1440×900 · 42 frames received · text reader loading · area not set');
   });
   it('says when no new frame came for a while', () => {
-    expect(captureDetails({ ...c, idle: 12_400, area: 'marked' })).toContain(' · none new for 12s (normal while the screen is still) · ');
+    expect(captureDetails({ ...c, idle: 12_400, target: 'shop-marked' })).toContain(' · none new for 12s (normal while the screen is still) · ');
     expect(captureDetails({ ...c, idle: null })).not.toContain('none new');
+  });
+  it('says plainly that shops are not read while your items are, and where your items are read', () => {
+    expect(captureDetails({ ...c, target: 'items' })).toBe('sharing window 1440×900 · 42 frames received · text reader ready · not reading shops · reading your items anywhere on screen');
+    expect(captureDetails({ ...c, target: 'items-marked' })).toMatch(/ · not reading shops · reading your items beside the marked area$/);
+    expect(captureDetails({ ...c, target: 'paused' })).toMatch(/ · not reading shops · your items paused$/);
+  });
+});
+
+describe('Troubleshooting', () => {
+  type Picture = CanvasImageSource & { width: number; height: number };
+  it("shows what the mode read last, and says what it is: the shop's list, or your item's tooltip", () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage() {} } as unknown as CanvasRenderingContext2D);
+    const list = { width: 300, height: 200 } as Picture, tip = { width: 100, height: 150 } as Picture;
+    let mode: ScanMode = 'deals', seen: Picture | null = list;
+    const view = new SettingsView(document.getElementById('root')!, {
+      canScan: () => true, markShop() {}, markItems() {}, loadShot: async () => {}, diag: () => 'sharing window', seen: () => seen, mode: () => mode,
+    });
+    view.wire();
+    const wrap = document.getElementById('seenWrap')!, note = () => document.getElementById('seenNote')!.textContent;
+    document.querySelector<HTMLDetailsElement>('#trouble')!.open = true;
+    view.renderTrouble();
+    expect(wrap.hidden).toBe(false);
+    expect(note()).toContain('If it doesn\'t show the item names and prices, use Mark the shop area.');
+    // your items: nothing read yet, so no picture, not the shop's list
+    mode = 'inventory'; seen = null;
+    view.renderTrouble();
+    expect(wrap.hidden).toBe(true);
+    seen = tip;
+    view.renderTrouble();
+    expect(wrap.hidden).toBe(false);
+    expect(note()).toBe("This is the last tooltip read for your items. If it isn't the item you pointed at, use Mark the inventory area.");
+    vi.restoreAllMocks();
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { isEquipId, loadEquipFacts, parseEquipFacts } from '../src/market/equipFacts';
-import { FACTS } from './helpers/market';
+import { equipFact } from '../src/engine';
+import { isEquipId, loadEquipFacts, parseEquipFacts, type EquipFacts } from '../src/market/equipFacts';
+import { CATALOG, engine, FACTS } from './helpers/market';
 
 describe('equip facts', () => {
   it('reads upgrade slots and base stats by item id, with the stat labels the tooltips use', () => {
@@ -46,6 +47,19 @@ describe('equip facts', () => {
     expect((await loadEquipFacts('equips.json', ok)).get(1302012)).toEqual({ slots: 7, base: { att: 60 } });
   });
 
+  it('marks the equips the file says share a name with another of other facts, and reads a file without the marking as before', () => {
+    const rows = [[1302000, 7, { WAT: 17 }], [1302999, 7, { WAT: 19 }], [1442000, 7, { WAT: 30 }]];
+    const marked = parseEquipFacts({ items: rows, ambiguous: [1302000, 1302999, 2000000, 'x'] });
+    expect([...marked]).toEqual([
+      [1302000, { slots: 7, base: { att: 17 }, ambiguous: true }],
+      [1302999, { slots: 7, base: { att: 19 }, ambiguous: true }],
+      [1442000, { slots: 7, base: { att: 30 } }],
+    ]);
+    for (const old of [{ items: rows }, { items: rows, ambiguous: 'junk' }]) {
+      expect([...parseEquipFacts(old).values()].some((f) => 'ambiguous' in f)).toBe(false);
+    }
+  });
+
   it('tells an equip by its id', () => {
     expect(isEquipId(1000000)).toBe(true);
     expect(isEquipId(1302012)).toBe(true);
@@ -54,5 +68,24 @@ describe('equip facts', () => {
     expect(isEquipId(2000000)).toBe(false);
     expect(isEquipId(2040801)).toBe(false);
     expect(isEquipId(1302012.5)).toBe(false);
+  });
+});
+
+describe("an item's facts", () => {
+  // Traus is on the tracker; Sword is only in the game's item list, found there by its name
+  const facts = (ambiguous?: number[]) => parseEquipFacts({ items: [[1302012, 7, { WAT: 60 }], [1302000, 7, { WAT: 17 }]], ambiguous });
+  const withFacts = (f: EquipFacts) => { const e = engine({ facts: f }); e.market = e.market.withCatalog(CATALOG); return e; };
+
+  it("are the ones of the item's id, from the tracker or from the game's item list", () => {
+    const e = withFacts(facts());
+    expect(equipFact(e, 'traus')).toEqual({ slots: 7, base: { att: 60 } });
+    expect(equipFact(e, 'sword')).toEqual({ slots: 7, base: { att: 17 } });
+    expect(equipFact(e, 'dark guardian')).toBeUndefined();   // no facts for its id
+  });
+
+  it("are none for a name another equip shares with other facts, unless the tracker gave the id", () => {
+    const e = withFacts(facts([1302012, 1302000]));
+    expect(equipFact(e, 'sword')).toBeUndefined();   // the game's list keeps one id per name: it may be the other one's
+    expect(equipFact(e, 'traus')).toMatchObject({ slots: 7, base: { att: 60 } });
   });
 });
