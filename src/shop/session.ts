@@ -30,14 +30,44 @@ export interface SessionEvents {
 }
 
 const keyOf = (r: Listing) => `${r.key}|${r.qty}|${r.price}|${r.greyed ? 1 : 0}`;
+/** The live listing a sold (greyed) row is the twin of: the same item, quantity and price. */
+const liveKeyOf = (soldKey: string) => soldKey.replace(/\|1$/, '|0');
+/**
+ * A row's height as a fraction of the frame, when a read has too few rows to tell: about what a shop row is
+ * at the sizes the benchmark covers. Only used to compare positions across a gap.
+ */
+const ROW_GUESS = 0.03;
+/** A row seen on screen: its key and where it sat. */
+interface Seen { k: string; fy: number | null }
 export const dealKey = (x: { key: string; qty: number; price: number; sig?: string }) => `${x.key}|${x.qty}|${x.price}|${x.sig ?? ''}`;
 const REALERT_MS = 10 * 60e3;
 const MAX_DEALS = 60;
+
+/** A row's height in a read: the smallest step between two rows' positions. */
+function rowStep(rows: readonly Seen[]): number | null {
+  const ys = [...new Set(rows.map((r) => r.fy).filter((y): y is number => y != null))].sort((a, b) => a - b);
+  let step: number | null = null;
+  for (let i = 1; i < ys.length; i++) { const d = ys[i]! - ys[i - 1]!; if (d > 0.001 && (step == null || d < step)) step = d; }
+  return step;
+}
+
+/**
+ * Whether a list read after a gap has a row that was visible before it, at the same position (within half a
+ * row). Rows read without a position (a still test frame) match by their listing alone.
+ */
+function sameSpot(before: readonly Seen[], now: readonly Seen[]): boolean {
+  const half = (rowStep(before) ?? rowStep(now) ?? ROW_GUESS) / 2;
+  return now.some((x) => before.some((b) => b.k === x.k && (b.fy == null || x.fy == null || Math.abs(b.fy - x.fy) <= half)));
+}
 
 export class ShopSession {
   open = false;
   since = 0;
   private miss = 0;
+  /** reads with no list since the last confirmed one: the next list may be another shop */
+  private gap = false;
+  /** the rows visible in the last read with a list, before any gap */
+  private before: Seen[] = [];
   readonly rows = new Map<string, ShopRecord>();
   private pending = new Map<string, { r: Listing; read: number }>();
   /** something new is waiting for its second read, so re-read even if the screen didn't change */
@@ -72,6 +102,7 @@ export class ShopSession {
   read(raw: readonly RawListing[], live: boolean): boolean {
     if (!raw.length) {
       this.miss++;
+      this.gap = true;
       this.pending.clear();
       this.recheck = false;
       if (this.open && this.miss >= 2) this.close();
@@ -99,18 +130,29 @@ export class ShopSession {
       else if (!w) this.pending.set(k, { r, read: n });
     }
     this.recheck = [...this.pending.values()].some((v) => v.read === n);
-    if (!ok.length) return false;
+    const seen: Seen[] = rows.map((r) => ({ k: keyOf(r), fy: r.fy ?? null }));
+    if (!ok.length) { if (!this.gap) this.before = seen; return false; }
 
-    // a confirmed list with nothing in common with the open one means a different shop
-    if (this.open && this.rows.size && ok.length >= 2 && !ok.some((r) => this.rows.has(keyOf(r)))) this.rows.clear();
+    // after a gap, the list is the same shop only if a row is back where it was; otherwise it is another shop
+    if (this.open && this.gap && this.rows.size && !sameSpot(this.before, seen.filter((x) => ok.some((r) => keyOf(r) === x.k)))) {
+      this.rows.clear();
+      this.since = this.e.now();
+    }
     if (!this.open) { this.open = true; this.since = this.e.now(); this.rows.clear(); }
+    this.gap = false;
+    this.before = seen;
 
+    const had = new Set(this.rows.keys());
+    /** sold rows that rose this read, and by how many */
+    const soldRise = new Map<string, number>();
     let bookChanged = false;
     for (const r of ok) {
       const k = keyOf(r);
       const existing = this.rows.get(k);
       if (existing) {
+        const was = existing.count;
         existing.count = Math.max(existing.count, countNow.get(k) ?? 1);
+        if (r.greyed && existing.count > was) soldRise.set(k, existing.count - was);
         if (r.fy != null) existing.fy = r.fy;
         if (fysNow.has(k)) existing.fys = fysNow.get(k)!;
         continue;
@@ -118,12 +160,24 @@ export class ShopSession {
       const ev = evaluate(this.e, r);   // judged before this listing joins the history
       const rec: ShopRecord = { ...r, ...ev, count: countNow.get(k) ?? 1, fys: fysNow.get(k) ?? [], seenAt: this.e.now() };
       this.rows.set(k, rec);
+      if (r.greyed) soldRise.set(k, rec.count);
       if (!r.greyed && !r.unsure) {
         const mk = this.e.market.get(r.key);
         logSighting(this.e.book, r, mk ? mk.n : r.name + (r.truncated ? '…' : ''), this.e.now());
         bookChanged = true;
       }
       if (ev.verdict === 'deal') this.alert(rec);
+    }
+
+    // A greyed row is a listing that sold: as its count rises, its live twin's count drops by as much (never
+    // below the live copies on screen now), and the live record goes at 0. Only for a twin seen before this read:
+    // a shop that opens with sold rows has nothing to take them from.
+    for (const [k, rise] of soldRise) {
+      const lk = liveKeyOf(k), live = this.rows.get(lk);
+      if (!live || !had.has(lk)) continue;
+      live.count = Math.max(countNow.get(lk) ?? 0, live.count - rise);
+      if (live.count <= 0) { this.rows.delete(lk); continue; }
+      while (live.copies && live.copies.size > live.count) live.copies.delete(live.copies.keys().next().value!);
     }
     return bookChanged;
   }
@@ -133,6 +187,8 @@ export class ShopSession {
 
   close(): void {
     this.open = false;
+    this.gap = false;
+    this.before = [];
     this.rows.clear();
     this.pending.clear();
     this.recheck = false;

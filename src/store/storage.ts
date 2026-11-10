@@ -1,6 +1,7 @@
 import { cleanEntries } from '../appraisal/entries';
-import { DEFAULT_SETTINGS, type AppraisalData, type MarketData, type PriceBook, type Region, type Settings } from '../lib/types';
+import type { AppraisalData, MarketData, PriceBook, Region, Settings } from '../lib/types';
 import { isPriceBook } from '../pricing/priceBook';
+import { sanitizeSettings } from '../settings/schema';
 
 /** Same keys as the single-file scanner, so its Export file imports unchanged. */
 const PREFIX = 'fmscan.v1.';
@@ -20,7 +21,8 @@ export class Storage {
     try { this.ls?.setItem(PREFIX + key, JSON.stringify(value)); return !!this.ls; } catch { return false; }
   }
 
-  loadSettings(): Settings { return { ...DEFAULT_SETTINGS, ...this.get<Partial<Settings>>('settings', {}) }; }
+  /** The stored settings, with defaults for what is missing and every value checked against its limits. */
+  loadSettings(): Settings { return sanitizeSettings(this.get<unknown>('settings', {})); }
   saveSettings(s: Settings): boolean { return this.set('settings', s); }
 
   loadBook(): PriceBook {
