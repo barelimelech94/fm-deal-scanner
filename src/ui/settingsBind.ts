@@ -5,14 +5,24 @@ import { sanitizeValue, settingOf, type SettingDef, type SettingValue } from '..
 type Control = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
 /**
- * What a control holds, as the setting's value: a number for a number box (commas allowed), the option for a
- * list or a switch. Undefined when it holds nothing usable, such as an empty box. Limits are not applied here.
+ * A number as a player types it: digits, with thousands commas only where they belong ("3,000", "1,250,000"), an
+ * optional decimal part, and an optional k or m ("5k" is 5,000, "1.5m" is 1,500,000), and a minus for the settings that go below 0; spaces around it are ignored.
+ * A decimal part of exactly three digits with no k or m ("3.000") is refused: it reads as thousands written with a
+ * dot. Anything else ("12 500", "2,5", "abc", "") is null, so nothing is guessed.
+ */
+export function parseTypedNumber(raw: string): number | null {
+  const m = raw.trim().toLowerCase().match(/^(-?)(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?([km])?$/);
+  if (!m || (m[3]?.length === 3 && !m[4])) return null;
+  const v = parseFloat(`${m[1]}${m[2]!.replace(/,/g, '')}${m[3] ? `.${m[3]}` : ''}`);
+  return m[4] === 'k' ? v * 1e3 : m[4] === 'm' ? v * 1e6 : v;
+}
+
+/**
+ * What a control holds, as the setting's value: a number for a number box (see `parseTypedNumber`), the option for
+ * a list or a switch. Undefined when it holds nothing usable, such as an empty box. Limits are not applied here.
  */
 export function parseInput(def: SettingDef, raw: string, checked: boolean): SettingValue | undefined {
-  if (def.kind === 'number') {
-    const v = parseFloat(raw.replace(/,/g, '').trim());
-    return Number.isFinite(v) ? v : undefined;
-  }
+  if (def.kind === 'number') return parseTypedNumber(raw) ?? undefined;
   if (def.kind === 'toggle') return def.options![checked ? 0 : 1]!.value;
   return def.options!.find((o) => String(o.value) === raw)?.value;
 }

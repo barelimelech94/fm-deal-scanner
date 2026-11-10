@@ -72,8 +72,23 @@ describe('the capture details in Troubleshooting', () => {
 describe('the settings binder', () => {
   it('reads a number box, commas and all, and nothing from an empty one', () => {
     expect(parseInput(settingOf('minProfit'), '12,500', false)).toBe(12500);
+    expect(parseInput(settingOf('minProfit'), '1,250,000', false)).toBe(1_250_000);
     expect(parseInput(settingOf('fee'), ' 2.5 ', false)).toBe(2.5);
+    expect(parseInput(settingOf('minProfit'), '0', false)).toBe(0);
+    expect(parseInput(settingOf('storeAdjust'), '-10', false)).toBe(-10);
     expect(parseInput(settingOf('fee'), '', false)).toBeUndefined();
+  });
+
+  it('reads mesos written the short way: 5k, 1.5m', () => {
+    expect(parseInput(settingOf('minProfit'), '5k', false)).toBe(5000);
+    expect(parseInput(settingOf('minProfit'), ' 1.5M ', false)).toBe(1_500_000);
+    expect(parseInput(settingOf('minProfit'), '2,500k', false)).toBe(2_500_000);
+  });
+
+  it('reads nothing from a number it cannot be sure of', () => {
+    for (const raw of ['12 500', '2,5', '3.000', '3.000k x', 'abc', '1,25', '12,5000', '--5', '5kk', '.5', '5.']) {
+      expect(parseInput(settingOf('minProfit'), raw, false), raw).toBeUndefined();
+    }
   });
 
   it('reads a list by its option, and a switch by whether it is on', () => {
@@ -121,6 +136,21 @@ describe('the settings binder', () => {
     type('#i', '0.01');
     expect(settings).toMatchObject({ discount: 5, fee: 20, interval: 0.4 });
     expect([val('#d'), val('#f'), val('#i')]).toEqual(['5', '20', '0.4']);
+  });
+
+  it('applies the limits to mesos written the short way, and leaves the setting alone for what it cannot read', () => {
+    const { settings, changed, type, val } = bound('<input type="text" id="p" data-setting="minProfit"><input type="text" id="f" data-setting="fee">');
+    type('#p', '5k');
+    expect([settings.minProfit, val('#p')]).toEqual([5000, '5,000']);
+    type('#f', '5k');
+    expect([settings.fee, val('#f')]).toEqual([20, '20']);
+    for (const raw of ['12 500', '3.000', 'abc', '']) {
+      type('#p', raw);
+      expect([settings.minProfit, val('#p')]).toEqual([5000, '5,000']);
+    }
+    type('#f', '2,5');
+    expect([settings.fee, val('#f')]).toEqual([20, '20']);
+    expect(changed).toEqual(['minProfit', 'fee']);
   });
 
   it('puts the value back when what was typed is not a number, and tells of no change', () => {

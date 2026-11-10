@@ -614,6 +614,15 @@ test('the deal rules in the Open shop sentence and the bell are the settings in 
   await rule('minProfit').fill('12500');
   await rule('minProfit').press('Tab');
   await expect(rule('minProfit')).toHaveValue('12,500');
+  // the short way reads as mesos; what can't be read leaves the rule as it was
+  await rule('minProfit').fill('5k');
+  await rule('minProfit').press('Tab');
+  await expect(rule('minProfit')).toHaveValue('5,000');
+  await rule('minProfit').fill('12 500');
+  await rule('minProfit').press('Tab');
+  await expect(rule('minProfit')).toHaveValue('5,000');
+  await rule('minProfit').fill('12,500');
+  await rule('minProfit').press('Tab');
   await rule('fee').fill('99');
   await rule('fee').press('Tab');
   await expect(rule('fee')).toHaveValue('20');
