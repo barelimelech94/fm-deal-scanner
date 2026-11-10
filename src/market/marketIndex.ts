@@ -1,5 +1,5 @@
 import { itemNumber } from '../icons';
-import { fmtEach, pctTxt, salesTxt } from '../lib/format';
+import { ago, fmtEach, pctTxt, salesTxt } from '../lib/format';
 import { norm } from '../lib/text';
 import type { MarketData, MarketItem } from '../lib/types';
 import type { Catalog } from './catalog';
@@ -78,9 +78,11 @@ export function npcSellPrice(mk: MarketItem | null, ratio: number): number | nul
 /** fewer than 5 sales, or copies that sell for very different prices */
 export const isRough = (mk: MarketItem | null): boolean => !!mk && /[lw]/.test(mk.f ?? '');
 
-export function marketTip(mk: MarketItem | null): string {
+/** The tracker's numbers for an item, in words; with its own age when its price is older than the rest. */
+export function marketTip(mk: MarketItem | null, now: number = Date.now()): string {
   if (!mk) return '';
   const notes: string[] = [];
+  if (mk.t) notes.push(`price from ${ago(mk.t, now)}`);
   if ((mk.f ?? '').includes('l')) notes.push('fewer than 5 sales, rough guide');
   if ((mk.f ?? '').includes('w')) notes.push('copies sell for very different prices');
   return `Market: ${mk.p ? `${fmtEach(mk.p)} typical sale` : 'no sales'} · ${salesTxt(mk.s)} · 24h ${pctTxt(mk.d)} · 7d ${pctTxt(mk.w)}`

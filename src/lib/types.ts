@@ -99,6 +99,8 @@ export interface MarketItem {
   e?: string;
   /** the lowest price an NPC shop sells it at (what the NPC charges you), when one does */
   npc?: number;
+  /** when this price was taken (ms), when it is older than the data's `asOf`: kept from an earlier page */
+  t?: number;
 }
 
 export interface MarketData {
