@@ -33,6 +33,7 @@ export class CaptureBar {
     pill.dataset.state = st.state;
     if (setHtml(text, st.html)) pill.title = text.textContent ?? '';
     setText($('captureMode'), this.s.mode === 'inventory' ? 'Inventory' : 'Deals');
+    $('captureMode').dataset.mode = this.s.mode;
     setHidden($('btnStart'), on);
     setHidden($('btnStop'), !on);
     $<HTMLButtonElement>('btnPip').disabled = !on;

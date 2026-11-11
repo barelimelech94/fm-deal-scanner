@@ -110,7 +110,7 @@ export class InventoryView {
 
   /** Scanning was turned on or off, here or elsewhere: the hint says what that means. */
   scanningChanged(): void {
-    this.setHint(this.scanning ? "Scanning. Point at an item in the game: it is added a moment after its tooltip shows. Pause before moving over things you don't want counted." : '');
+    this.setHint(this.scanning ? "Each item is added a moment after its tooltip shows. Pause before moving over things you don't want counted." : '');
     this.render();
   }
 

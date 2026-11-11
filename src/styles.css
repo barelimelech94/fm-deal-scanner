@@ -96,12 +96,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.small { padding: 4px 10px; font-size: .82rem; }
 .filebtn { position: relative; overflow: hidden; display: inline-block; }
 .filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+/* The status line takes the room the bar has, and wraps to a second line before it cuts anything off */
 .status {
-  display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 46ch;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
-  padding: 5px 12px 5px 10px; font-size: .86rem; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; max-width: 64ch;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 5px 12px 5px 10px; font-size: .86rem; line-height: 1.25; color: var(--muted);
 }
-.status #statusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status #statusText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* the mode is the open view's own on Deals and Inventory: the tab says it already */
+body:has(#tab-deals[aria-selected="true"]) .modechip[data-mode="deals"],
+body:has(#tab-inventory[aria-selected="true"]) .modechip[data-mode="inventory"] { display: none; }
+/* under 1240px the coin stands for the name, so the status line has room */
+@media (max-width: 1239px) {
+  .brand h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .bar { gap: 8px 14px; }
+}
 .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--sold); flex: none; }
 .status[data-state="watching"] .dot { background: var(--new); }
 .status[data-state="shop"] .dot { background: var(--deal); box-shadow: 0 0 0 3px var(--deal-bg); }
@@ -123,8 +132,8 @@ main { max-width: 1320px; margin: 0 auto; }
   .view.two { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
   /* Settings: the cards flow down two columns, so short ones leave no gaps */
   .view.cols { display: block; columns: 2; column-gap: 16px; }
+  .view.cols > * { break-inside: avoid; margin-bottom: 16px; }
 }
-.view.cols > * { break-inside: avoid; margin-bottom: 16px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
 .panel.lead { box-shadow: var(--shadow); }
 .panel.quiet { background: var(--panel-q); }
@@ -258,7 +267,9 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .aphint { margin: 2px 0 8px; }
 .aphint.bad { color: var(--high); }
 .invtable { max-height: 560px; overflow: auto; }
-#apTable td.acts { white-space: nowrap; text-align: right; }
+/* the buttons hug the right edge; the spare width goes to the columns with numbers */
+#apTable td.acts, #apTable td:nth-last-child(2) { white-space: nowrap; text-align: right; width: 1%; }
+#apTable td:nth-last-child(2) { text-align: left; }
 #apTable td .sub { text-align: right; }
 #apTable td.name .sub { text-align: left; }
 tr.ap-ignored td { color: var(--sold); }
@@ -309,6 +320,7 @@ details.more > * + * { margin-top: 8px; }
 .help { color: var(--muted); font-size: .8rem; line-height: 1.35; }
 .setting-control { display: grid; grid-template-columns: auto 5.5em; align-items: center; gap: 8px; justify-items: end; }
 .setting-control input[type="number"] { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.setting-control select { min-width: 110px; }
 .setting-control input[type="number"], .setting-control select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .setting-control .unit { justify-self: start; color: var(--muted); font-size: .8rem; line-height: 1.2; }
 .switch { appearance: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background .15s; }
