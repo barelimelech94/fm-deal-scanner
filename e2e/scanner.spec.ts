@@ -674,6 +674,8 @@ test('shows one view at a time, by tab, by address and by keyboard, and remember
   await expect(page.locator('#tab-settings')).toBeFocused();
   await expect(page.locator('#tab-settings')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#captureMode')).toHaveText('Inventory');
+  // the bar names the mode only where the open view doesn't
+  await expect(page.locator('#captureMode')).toBeVisible();
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#tab-deals')).toBeFocused();
   await page.keyboard.press('End');
@@ -688,6 +690,28 @@ test('shows one view at a time, by tab, by address and by keyboard, and remember
   await page.evaluate(() => { location.hash = '#deals'; });
   await expect(shown()).toHaveAttribute('id', 'view-deals');
   await expect(page.locator('#captureMode')).toHaveText('Deals');
+  await expect(page.locator('#captureMode')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('the status line shows in full in a window 1000 px wide', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  const show = await shareCanvas(page);
+  const { errors } = await open(page);
+  // nothing in it is cut off: its words fit the lines it shows
+  const whole = () => page.locator('#statusText').evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1);
+  await expect(page.locator('#statusText')).toContainText('Press Start capture and pick the MapleStory window.');
+  expect(await whole()).toBe(true);
+  await page.click('#btnStart');
+  await expect(page.locator('#statusText')).toContainText('Watching for shops');
+  expect(await whole()).toBe(true);
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await show(screenFile('screen.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
+  await expect(page.locator('#statusText')).toContainText('Shop open, 6 listings');
+  expect(await whole()).toBe(true);
+  await view(page, 'inventory');
+  await expect(page.locator('#statusText')).toContainText('Not scanning your items. Press Scan my items.');
+  expect(await whole()).toBe(true);
   expect(errors).toEqual([]);
 });
 

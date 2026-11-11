@@ -335,7 +335,7 @@ export class ScanController<F, I> {
     return {
       state: 'watching',
       html: '<b>Watching for shops.</b> Open a shop in the game.'
-        + (this.d.capture.sharingWholeScreen() ? ' With the whole screen shared, it only sees the game while the game is in front.' : ''),
+        + (this.d.capture.sharingWholeScreen() ? ' With the whole screen shared, keep the game in front.' : ''),
     };
   }
 }
