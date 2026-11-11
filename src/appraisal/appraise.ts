@@ -45,10 +45,6 @@ export interface AppraisalResult {
   /** lines and stacks counted (ignored ones are not) */
   kinds: number;
   items: number;
-  /** the percentage of the total on offer */
-  bulk: number;
-  /** the total at that percentage */
-  quote: number;
 }
 
 /** One line: what each costs in this mode, what that makes for the stack, and how sure the price is. */
@@ -73,8 +69,8 @@ export function appraiseEntry(e: Engine, entry: AppraisalEntry, mode: AppraisalM
   return { entry, name, known: e.market.knownName(entry.key) != null, set, equip: isEquipItem(e, entry.key, entry.tip), unit, npc, src, stats, total, tag };
 }
 
-/** The whole appraisal: every line priced in `mode`, the total, and the offer at `bulk` percent of it. */
-export function appraise(e: Engine, entries: readonly AppraisalEntry[], mode: AppraisalMode, bulk = 100): AppraisalResult {
+/** The whole appraisal: every line priced in `mode`, and the total. */
+export function appraise(e: Engine, entries: readonly AppraisalEntry[], mode: AppraisalMode): AppraisalResult {
   const lines = entries.map((x) => appraiseEntry(e, x, mode));
   let total = 0, rough = 0, unpriced = 0, ignored = 0, kinds = 0, items = 0;
   for (const l of lines) {
@@ -85,7 +81,7 @@ export function appraise(e: Engine, entries: readonly AppraisalEntry[], mode: Ap
     total += l.total ?? 0;
     if (l.tag === 'rough') rough += l.total ?? 0;
   }
-  return { mode, lines, total, rough, unpriced, ignored, kinds, items, bulk, quote: Math.round((total * bulk) / 100) };
+  return { mode, lines, total, rough, unpriced, ignored, kinds, items };
 }
 
 /**

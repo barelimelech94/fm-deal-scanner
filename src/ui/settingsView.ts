@@ -16,9 +16,16 @@ export const SETTING_GROUPS: readonly { group: Exclude<SettingGroup, 'state'>; t
 /** The id of a setting's control in the Settings view. */
 export const settingId = (key: keyof Settings): string => `set-${key}`;
 
-/** A setting's control: a number box with its limits, a list of its options, or a switch. */
+/**
+ * A setting's control: a number box with its limits, a list of its options, or a switch. Mesos go in a text box,
+ * read as a player types them ("5k", "1.5m", "12,500") and shown with their thousands apart, as on the rest of
+ * the page; its limits are applied as it is typed.
+ */
 export function controlHtml(def: SettingDef): string {
   const id = settingId(def.key), attrs = `id="${id}" data-setting="${def.key}" aria-describedby="help-${def.key}"`;
+  if (def.kind === 'number' && def.unit === 'mesos') {
+    return `<input type="text" inputmode="numeric" autocomplete="off" ${attrs}><span class="unit">mesos</span>`;
+  }
   if (def.kind === 'number') {
     return `<input type="number" ${attrs} min="${def.min}" max="${def.max}" step="${def.step}">`
       + `<span class="unit">${esc(def.unit ?? '')}</span>`;

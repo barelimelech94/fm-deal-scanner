@@ -537,4 +537,65 @@ describe('ScanController', () => {
       expect(c.canScan).toBe(false);
     });
   });
+
+  describe('scanning your items with a live share', () => {
+    it('starts scanning when capture starts in inventory: one press, not two', async () => {
+      const { c, collector, capture, data, answer } = setup();
+      answer(SCROLL_LINES);
+      c.setMode('inventory');
+      capture.frame = SCROLL;
+      expect(await c.startCapture()).toBe(true);
+      expect(collector.scanning).toBe(true);
+      expect(c.paused).toBe(false);
+      expect(c.status().html).toContain('Scanning your items');
+      await c.tick(true);
+      await c.tick(true);   // a live screen shows the same tooltip twice running before it is read
+      expect(data.entries.map((x) => x.name)).toEqual(['Overall Armor LUK Scroll: Greater']);
+    });
+
+    it('leaves scanning off when capture starts in deals, and turns it on on the way to inventory', async () => {
+      const { c, collector } = setup();
+      await c.startCapture();
+      expect(collector.scanning).toBe(false);
+      c.setMode('inventory');
+      expect(collector.scanning).toBe(true);
+    });
+
+    it('resumes after a trip to deals, but not after you paused, until you resume', async () => {
+      const { c, collector } = setup();
+      c.setMode('inventory');
+      await c.startCapture();
+      c.setMode('deals');
+      expect(collector.scanning).toBe(false);
+      c.setMode('inventory');
+      expect(collector.scanning).toBe(true);
+      // you pause: a trip to deals and back keeps it paused
+      expect(c.setScanning(false)).toBe(false);
+      expect(c.paused).toBe(true);
+      expect(c.status()).toEqual({ state: 'idle', html: expect.stringContaining('Paused') });
+      c.setMode('deals');
+      c.setMode('inventory');
+      expect(collector.scanning).toBe(false);
+      expect(c.setScanning(true)).toBe(true);
+      expect(c.paused).toBe(false);
+    });
+
+    it('forgets your pause when capture starts again', async () => {
+      const { c, collector } = setup();
+      c.setMode('inventory');
+      await c.startCapture();
+      c.setScanning(false);
+      c.stopCapture();
+      await c.startCapture();
+      expect(collector.scanning).toBe(true);
+      expect(c.paused).toBe(false);
+    });
+
+    it('does not start scanning a screenshot by itself', async () => {
+      const { c, collector } = setup();
+      c.setMode('inventory');
+      await c.useStill(SCROLL);
+      expect(collector.scanning).toBe(false);
+    });
+  });
 });

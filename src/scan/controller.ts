@@ -59,7 +59,7 @@ export type StatusState = 'idle' | 'busy' | 'watching' | 'shop';
 /** The status line: a state for its dot, and the words, as HTML. */
 export interface ScanStatus { state: StatusState; html: string }
 
-const IDLE = '<b>Not capturing.</b> Press Start capture and pick the MapleStory window.';
+const IDLE = '<b>Not capturing.</b>';
 const PREVIEW = 'Screen capture is blocked because this page is open inside a preview or frame. Open it in its own Chrome tab.';
 const MACPERM = 'macOS refused the capture. In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn Chrome off and on again, then <b>quit Chrome with ⌘Q</b> and reopen it. Chrome only picks up that setting after a full restart.';
 const READER_FAILED = 'The text reader failed to load. Check your internet connection and reload this page.';
@@ -79,7 +79,8 @@ function captureErrorText(e: CaptureFailed): string {
  * The scanning, without the page: the capture, the ticker, the text reader, both scanners and the mode.
  * One thing at a time: in `deals` mode it looks for a shop and reads its list and the tooltips over it, and
  * never feeds your items; in `inventory` mode it reads hovered tooltips into your items while scanning is on,
- * and never looks for a shop. Each tooltip is read once, by the mode's own reader. Listeners hear what changed.
+ * and never looks for a shop. With a live share, scanning is on in `inventory` mode unless you paused it: starting
+ * capture there starts it, and coming back from deals resumes it. Each tooltip is read once, by the mode's own reader. Listeners hear what changed.
  */
 export class ScanController<F, I> {
   /** checks of the screen done, with a frame to look at */
@@ -97,6 +98,8 @@ export class ScanController<F, I> {
   /** checks in a row whose frame could not be grabbed or made ready to read */
   private failures = 0;
   private loading = false;
+  /** you pressed Pause: scanning your items stays off until you resume it, or start capture again */
+  private userPaused = false;
   /** a screenshot picked with "Test with a screenshot", read instead of the share */
   private still: F | null = null;
   private readonly ticker: Repeater;
@@ -113,6 +116,8 @@ export class ScanController<F, I> {
   get capturing(): boolean { return this.d.capture.active; }
   /** a share or a screenshot is there to read */
   get canScan(): boolean { return this.capturing || this.still != null; }
+  /** you paused scanning your items (not merely "not scanning yet") */
+  get paused(): boolean { return this.userPaused; }
   /** the shop list is found by itself, not read from a marked area */
   get autoArea(): boolean { return this.d.engine.settings.area !== 'manual'; }
   /** in deals mode, with the area to be marked by hand and none marked yet: nothing can be read */
@@ -151,15 +156,26 @@ export class ScanController<F, I> {
       this.d.session.forgetHover();
       this.d.shop.reset();
       this.emit({ kind: 'shop' });
+      // back in inventory with a live share: scanning carries on, unless you paused it
+      if (this.capturing && !this.userPaused) this.turnScanning(true);
     } else {
-      this.setScanning(false);
+      this.turnScanning(false);
     }
     this.statusChanged();
     if (this.canScan) void this.tick(true);
   }
 
-  /** Turns scanning your items on or off. It can't start with nothing to read. Returns whether it is on. */
+  /**
+   * You turned scanning your items on or off (Scan my items, Pause, Resume). Off is remembered as a pause. It
+   * can't start with nothing to read. Returns whether it is on.
+   */
   setScanning(on: boolean): boolean {
+    this.userPaused = !on;
+    return this.turnScanning(on);
+  }
+
+  /** Scanning your items on or off, as the mode and the capture call for: your pause is left as it is. */
+  private turnScanning(on: boolean): boolean {
     const c = this.d.collector;
     if (on && !this.canScan) return false;
     if (c.scanning === on) return on;
@@ -203,6 +219,9 @@ export class ScanController<F, I> {
     this.statusChanged();
     if (!(await this.loadReader())) return false;
     this.restartTicker();
+    // a share started in inventory mode is for scanning your items: no second press needed
+    this.userPaused = false;
+    if (this.mode === 'inventory') this.turnScanning(true);
     void this.tick(true);
     return true;
   }
@@ -216,7 +235,7 @@ export class ScanController<F, I> {
   stopCapture(): void {
     this.generation++;
     this.failures = 0;   // the status line says what it reads again at the end of the check
-    this.setScanning(false);
+    this.turnScanning(false);
     this.ticker.stop();
     this.d.capture.stop();
     this.d.session.close();
@@ -316,7 +335,9 @@ export class ScanController<F, I> {
     if (this.mode === 'inventory') {
       return this.d.collector.scanning
         ? { state: 'watching', html: '<b>Scanning your items.</b> Point at items in the game and they are added.' }
-        : { state: 'idle', html: '<b>Not scanning your items.</b> Press Scan my items.' };
+        : this.userPaused
+          ? { state: 'idle', html: '<b>Paused.</b> Press Resume to add the items you point at.' }
+          : { state: 'idle', html: '<b>Not scanning your items.</b> Press Scan my items.' };
     }
     if (this.needsShopArea) return { state: 'busy', html: '<b>Mark the shop area</b> in Settings so the scanner knows where to read.' };
     const s = this.d.session;

@@ -15,6 +15,8 @@ export interface OverlayDeps {
   capturing(): boolean;
   /** scanning your items */
   scanning(): boolean;
+  /** you paused scanning your items */
+  paused(): boolean;
   /** the open shop's rows, in the order the Deals view shows them */
   rows(): DisplayRow[];
   inventory(): InventoryGlance;
@@ -69,7 +71,7 @@ export class Overlay {
     if (!root) return;
     const { session, engine } = this.d, h = session.hover;
     setHtml(root, overlayHtml({
-      mode: this.d.mode(), open: session.open, capturing: this.d.capturing(), scanning: this.d.scanning(), rows: this.d.rows(),
+      mode: this.d.mode(), open: session.open, capturing: this.d.capturing(), scanning: this.d.scanning(), paused: this.d.paused(), rows: this.d.rows(),
       deal: freshDeal(session, engine.now()), hover: hoverText(h, engine), hoverKey: h?.key ?? null, inventory: this.d.inventory(),
     }, engine.market, this.d.failed));
   }

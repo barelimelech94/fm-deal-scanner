@@ -5,6 +5,7 @@ import type { ScanMode } from '../lib/types';
 import type { MarketIndex } from '../market/marketIndex';
 import type { Deal, DisplayRow } from '../shop/session';
 import { dealLine, iconHtml, pctCell, VERDICT } from './views';
+import { scanLabel } from './inventoryHtml';
 
 /** The item hovered last in your inventory, as the overlay shows it. */
 export interface GlanceItem {
@@ -33,6 +34,8 @@ export interface OverlayState {
   capturing: boolean;
   /** scanning your items (inventory mode) */
   scanning: boolean;
+  /** you paused scanning your items */
+  paused?: boolean;
   rows: DisplayRow[];
   deal: Deal | null;
   hover: string;
@@ -74,17 +77,18 @@ function dealsBodyHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySe
 }
 
 /**
- * Inventory: Scan my items or Pause, the item hovered last with its List at price large enough to read while the
+ * Inventory: Scan my items, Pause or Resume, the item hovered last with its List at price large enough to read while the
  * game has focus (its price and sales under it), then the running worth and how many items.
  */
 function inventoryBodyHtml(o: OverlayState, market: MarketIndex, failed?: ReadonlySet<string>): string {
   const g = o.inventory, it = g.last;
-  const scan = `<button class="btn${o.scanning ? '' : ' primary'}" data-act="scan" aria-pressed="${o.scanning}">${o.scanning ? 'Pause' : 'Scan my items'}</button>`;
+  const paused = !!o.paused && o.capturing;
+  const scan = `<button class="btn${o.scanning ? '' : ' primary'}" data-act="scan" aria-pressed="${o.scanning}">${scanLabel(o.scanning, paused)}</button>`;
   const last = it
     ? `<div class="plast">${iconHtml(market, it.key, failed)}<div class="plast-t"><span class="plast-n">${esc(it.name)}</span>`
       + `<span class="plast-l"><small>List at</small>${it.listAt == null ? 'no price' : fmt(it.listAt)}</span>`
       + `<span class="sub">${esc([it.unit == null ? '' : `${it.priceLabel} ${fmtEach(it.unit)}`, it.sales == null ? '' : salesTxt(it.sales)].filter(Boolean).join(' · '))}</span></div></div>`
-    : `<p class="empty">${o.scanning ? 'Point at an item in the game.' : 'Press Scan my items, then point at your items in the game.'}</p>`;
+    : `<p class="empty">${o.scanning ? 'Point at an item in the game.' : `Press ${scanLabel(false, paused)}, then point at your items in the game.`}</p>`;
   const worth = `<div class="pworth"><span class="dim">Worth</span><b>${fmt(g.worth)}</b><span class="dim">${fmt(g.items)} item${g.items === 1 ? '' : 's'}</span></div>`;
   return `<div class="pscan">${scan}</div>${last}${worth}` + (g.hint ? `<p class="apnote">${esc(g.hint)}</p>` : '');
 }

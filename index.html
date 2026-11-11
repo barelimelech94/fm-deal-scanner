@@ -15,19 +15,18 @@
       <div class="coin" aria-hidden="true">M</div>
       <h1>FM Deal Scanner</h1>
     </div>
-    <div class="tabs" role="tablist" aria-label="Views" aria-owns="tab-settings">
+    <div class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-deals" aria-controls="view-deals" aria-selected="true">Deals</button>
       <button class="tab" role="tab" id="tab-inventory" aria-controls="view-inventory" aria-selected="false" tabindex="-1">Inventory</button>
       <button class="tab" role="tab" id="tab-prices" aria-controls="view-prices" aria-selected="false" tabindex="-1">Prices</button>
+      <button class="tab" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false" tabindex="-1"><span class="gear" aria-hidden="true">⚙</span>Settings</button>
     </div>
     <div class="capture">
-      <span class="modechip" id="captureMode" data-mode="deals">Deals</span>
       <div class="status" id="status" data-state="idle" role="status" aria-live="polite"><span class="dot"></span><span id="statusText">Not capturing.</span></div>
       <button class="btn primary" id="btnStart">Start capture</button>
       <button class="btn" id="btnStop" hidden>Stop</button>
       <button class="btn" id="btnPip" disabled title="Floats a small always-on-top window over the game">Overlay</button>
     </div>
-    <button class="tab gear" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false" tabindex="-1" aria-label="Settings" title="Settings">⚙</button>
   </div>
   <div class="errorbar" id="captureError" role="alert" hidden><span id="captureErrorText"></span><button class="x" id="captureErrorClose" aria-label="Dismiss">×</button></div>
 </header>
@@ -44,9 +43,6 @@
         <h2 id="hShop">Open shop</h2>
         <span class="headtools"><button class="btn small" id="shopSortReset" hidden title="Order by deals first again">Best first</button><span class="meta" id="shopMeta">No shop open</span></span>
       </div>
-      <p class="rules">Flag listings <input class="inline" type="text" inputmode="numeric" data-setting="discount" aria-label="Discount needed, in %">% under usual that make
-        <input class="inline wide" type="text" inputmode="numeric" data-setting="minProfit" aria-label="Minimum profit, in mesos"> mesos after a
-        <input class="inline" type="text" inputmode="decimal" data-setting="fee" aria-label="Sales fee, in %">% fee.</p>
       <div class="banner" id="dealBanner" hidden>
         <span class="label" id="dealLabel">Deal</span>
         <span class="what" id="dealWhat"></span>
@@ -77,8 +73,7 @@
       <div class="panel-head">
         <h2 id="hDeals">Deals found</h2>
         <span class="headtools">
-          <button class="btn small bell" data-setting="sound" aria-label="Chime on a deal" title="Chime on a deal"></button>
-          <button class="btn small" id="btnClearDeals">Clear</button>
+          <button class="btn small" id="btnClearDeals" disabled>Clear</button>
         </span>
       </div>
       <div class="panel-body">
@@ -97,20 +92,29 @@
     <section class="panel lead inv" aria-labelledby="hAppr">
       <div class="panel-head">
         <h2 id="hAppr">Inventory</h2>
-        <span class="meta invmeta"><span id="apMeta">No items yet</span><span class="sep" id="apNeedWrap" hidden><button class="linkbtn" id="apNeedCount" aria-pressed="false"></button></span><span class="sep" id="apNoPrice" hidden></span></span>
+        <span class="meta invmeta"><span id="apMeta"></span><span class="sep" id="apNeedWrap" hidden><button class="linkbtn" id="apNeedCount" aria-pressed="false"></button></span><span class="sep" id="apNoPrice" hidden></span></span>
       </div>
       <div class="panel-body">
-        <div class="invtotals">
+        <div class="invtotals" id="apTotals" hidden>
           <div><span class="dim">Worth</span><b id="apTotal">0</b></div>
           <div><span class="dim">In your store</span><b id="apStore">0</b></div>
+          <button class="btn" id="apCopyStore" disabled title="What to type in your store: one line per item, in the order they were added">Copy store prices</button>
         </div>
         <p class="note invleft" id="apLeft"></p>
         <div class="aptoolbar">
           <button class="btn primary" id="apScan" aria-pressed="false">Scan my items</button>
           <button class="btn" id="apUndo" disabled>Undo</button>
-          <button class="btn" id="apAddOpen" aria-controls="apAddBox">+ Add by name</button>
+          <button class="btn" id="apAddOpen" aria-controls="apAddBox" aria-expanded="false">+ Add by name</button>
           <button class="btn ghost" id="apClear" disabled>Clear</button>
         </div>
+        <div class="addbox" id="apAddBox" hidden>
+          <textarea id="apAdd" aria-label="Items to add, one per line" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
+          <div class="row">
+            <button class="btn primary" id="apAddBtn">Add to inventory</button>
+            <button class="btn ghost" id="apAddCancel">Cancel</button>
+          </div>
+        </div>
+        <p class="note" id="apMsg" role="status"></p>
         <p class="note aphint" id="apHint" role="status" hidden></p>
         <div class="tablewrap invtable">
           <table id="apTable" hidden>
@@ -127,43 +131,8 @@
           </table>
         </div>
         <p class="empty" id="apEmpty">No items yet. Press Scan my items and point at them in the game, or add them by name.</p>
-        <details class="more" id="apAddBox">
-          <summary>Add items by typing</summary>
-          <textarea id="apAdd" aria-label="Items to add, one per line" placeholder="One item per line, with how many:&#10;Cape INT Scroll: Lesser x3&#10;Lemona&#10;12 x Red Potion"></textarea>
-          <div class="row">
-            <button class="btn" id="apAddBtn">Add to inventory</button>
-          </div>
-        </details>
-        <p class="note" id="apMsg" role="status"></p>
       </div>
     </section>
-
-    <section class="panel quiet" aria-labelledby="hStore">
-      <div class="panel-head"><h2 id="hStore">Store prices</h2></div>
-      <div class="panel-body stack">
-        <div class="pricerow" role="radiogroup" aria-label="Price items at">
-          <span class="lbl">Price items at</span>
-          <span class="seg">
-            <label><input type="radio" name="apMode" value="fair" data-setting="appraisalMode"><span>Market</span></label>
-            <label><input type="radio" name="apMode" value="greedy" data-setting="appraisalMode"><span>Asking</span></label>
-          </span>
-        </div>
-        <p class="note" id="apModeNote"></p>
-        <p class="sentence">List at <input class="inline" id="apAdjust" type="text" inputmode="numeric" data-setting="storeAdjust" aria-label="List at, in % of the price">% of that</p>
-        <div class="row"><button class="btn" id="apCopyStore" disabled>Copy store prices</button></div>
-        <p class="note">One line per item, in the order they were added.</p>
-      </div>
-    </section>
-
-    <details class="panel quiet sell" id="apSell">
-      <summary><h2>Sell everything at once</h2></summary>
-      <div class="panel-body stack">
-        <p class="sentence">Offer <input class="inline" id="apBulk" type="text" inputmode="numeric" data-setting="bulkOffer" aria-label="Offer, in % of the worth">% of the worth</p>
-        <p class="offer"><b id="apOffer">You'd ask 0</b></p>
-        <p class="apquote"><output id="apQuote">No items yet</output></p>
-        <div class="row"><button class="btn" id="apCopy" disabled>Copy offer</button></div>
-      </div>
-    </details>
   </section>
 
   <section class="view two" id="view-prices" role="tabpanel" aria-labelledby="tab-prices" tabindex="-1" hidden>

@@ -34,7 +34,7 @@ describe('the Settings view', () => {
     };
     expect(keysIn('Deals')).toEqual(['discount', 'minProfit', 'fee', 'sound']);
     expect(keysIn('Prices')).toEqual(['market', 'base', 'minSeen', 'npcRatio', 'statPct', 'slotWorth']);
-    expect(keysIn('Inventory')).toEqual(['appraisalMode', 'storeAdjust', 'bulkOffer', 'appraisalArea']);
+    expect(keysIn('Inventory')).toEqual(['appraisalMode', 'storeAdjust', 'appraisalArea']);
     expect(keysIn('Reading the screen')).toEqual(['interval', 'area', 'readStats']);
   });
 
@@ -52,6 +52,8 @@ describe('the Settings view', () => {
   it('gives a number its limits and unit, a list its options, and a switch a checkbox', () => {
     expect(controlHtml(settingOf('discount'))).toBe('<input type="number" id="set-discount" data-setting="discount" aria-describedby="help-discount" min="5" max="90" step="1"><span class="unit">%</span>');
     expect(controlHtml(settingOf('minSeen'))).toContain('step="1"><span class="unit"></span>');
+    // mesos are a text box, read the way a player types them ("5k", "12,500"), as they were on the Deals view
+    expect(controlHtml(settingOf('minProfit'))).toBe('<input type="text" inputmode="numeric" autocomplete="off" id="set-minProfit" data-setting="minProfit" aria-describedby="help-minProfit"><span class="unit">mesos</span>');
     expect(controlHtml(settingOf('base'))).toContain('<option value="median">Middle</option><option value="q25">Lower quarter</option>');
     expect(controlHtml(settingOf('sound'))).toContain('type="checkbox" role="switch"');
   });
@@ -152,14 +154,14 @@ describe('the settings binder', () => {
   }
 
   it('shows the settings, and keeps every control of a setting in step', () => {
-    const { settings, changed, type, val } = bound('<input id="a" data-setting="bulkOffer"><select id="b" data-setting="appraisalMode"><option value="fair"></option><option value="greedy"></option></select><input id="c" data-setting="bulkOffer">');
-    expect(val('#a')).toBe('100');
-    type('#a', '90');
-    expect(settings.bulkOffer).toBe(90);
-    expect(val('#c')).toBe('90');
+    const { settings, changed, type, val } = bound('<input id="a" data-setting="storeAdjust"><select id="b" data-setting="appraisalMode"><option value="fair"></option><option value="greedy"></option></select><input id="c" data-setting="storeAdjust">');
+    expect(val('#a')).toBe('0');
+    type('#a', '10');
+    expect(settings.storeAdjust).toBe(10);
+    expect(val('#c')).toBe('10');
     type('#b', 'greedy');
     expect(settings.appraisalMode).toBe('greedy');
-    expect(changed).toEqual(['bulkOffer', 'appraisalMode']);
+    expect(changed).toEqual(['storeAdjust', 'appraisalMode']);
   });
 
   it('applies the limits as a value is typed', () => {

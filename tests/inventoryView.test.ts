@@ -18,8 +18,8 @@ const tip = (name: string): TooltipRead => ({ key: name.toLowerCase(), name, typ
 describe('InventoryView', () => {
   const setup = () => {
     const view = new InventoryView({
-      engine: hoverEngine(), store: new Storage(memory()), failed: new Set(), region: () => null, setScanning: () => true,
-      shown: () => true, version: () => '', capturing: () => false, openPrices() {}, startCapture() {}, overlay() {},
+      engine: hoverEngine(), store: new Storage(memory()), failed: new Set(), region: () => null, setScanning() {}, paused: () => false,
+      shown: () => true, version: () => '', capturing: () => false, openPrices() {}, overlay() {},
     });
     view.wire();
     view.render({ force: true });

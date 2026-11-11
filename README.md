@@ -10,13 +10,13 @@ Reads MapleStory Classic World off your screen and does two jobs:
 
 ## How to use it
 
-A bar across the top holds the tabs of the four views, **Start capture** and **Overlay**. Press **Start capture** and
-share the MapleStory window.
+A bar across the top holds the tabs of the four views (Deals, Inventory, Prices, Settings), **Start capture** and
+**Overlay**. Press **Start capture** and share the MapleStory window.
 
 **Deals** is where you start. Its **Get started** steps send you to load market prices, start capture and open a shop.
-Open shops in the game: listings show within a second, a deal chimes (the bell turns that off) and lands in **Deals
-found**. The sentence above the table holds the deal rules (how far under usual, the profit after the sales fee); click
-a column heading to order the shop by it. Point at a listing and its stats are read off the tooltip: points above or
+Open shops in the game: listings show within a second, a deal chimes and lands in **Deals found**. The deal rules (how
+far under usual, the profit after the sales fee) and the chime are in **Settings → Deals**; click a column heading to
+order the shop by it. Point at a listing and its stats are read off the tooltip: points above or
 below the item's base and used upgrade slots move its usual price. If the shop isn't found after a while, the view
 offers to mark its area.
 
@@ -24,16 +24,18 @@ offers to mark its area.
 market's) and a **Buy under** price (a listing at or below it is a deal whatever the usual price). The market prices are
 loaded here too.
 
-**Inventory** values your items. Press **Scan my items** and point at them one at a time, in your inventory, a trade
-window or storage; each is added a moment after its tooltip shows. The same slot counts once; the same item in another
-slot joins its line. **Pause** before moving over things you don't want counted, **Undo** takes the last one back, or
-add items by name. The number on a stack is not read, so type it: **N need a count** shows just those lines, and Enter
-moves to the next. You get **Worth** (at **Market** or **Asking** prices) and **In your store**: what to type in your
-store for each item, **List at** a percent above or below that price; **Copy store prices** copies them all. **Sell
-everything at once** makes an offer for the lot.
+**Inventory** values your items. Press **Scan my items** (it starts the capture if nothing is shared yet; starting
+capture while on Inventory scans too) and point at your items one at a time, in your inventory, a trade window or
+storage; each is added a moment after its tooltip shows. The same slot counts once; the same item in another slot joins
+its line. **Pause** before moving over things you don't want counted, then **Resume**; a trip to Deals and back resumes
+on its own unless you paused. **Undo** takes the last one back, and **+ Add by name** opens a box under the buttons for
+typing items in. The number on a stack is not read, so type it: **N need a count** shows just those lines, and Enter
+moves to the next. You get **Worth** and **In your store**: what to type in your store for each item; **Copy store
+prices** beside it copies them all. Market or Asking prices, and List at (a percent above or below the price), are in
+**Settings → Inventory**.
 
-**Settings** has every setting, in step with the same controls on the views, and **Data**: export and import a backup,
-or clear all sightings. **Troubleshooting** shows what the scanner reads.
+**Settings** is the one place for every setting, and has **Data**: export and import a backup, or clear all sightings.
+**Troubleshooting** shows what the scanner reads.
 
 **Overlay** (Chrome 116+) floats a small window over the game: in Deals the newest deal and the best listings, in
 Inventory the item you pointed at last with its List at price. Its **Deals | Inventory** switch sets the mode.

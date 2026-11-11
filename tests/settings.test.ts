@@ -32,7 +32,6 @@ describe('the settings table', () => {
     expect(settingOf('statPct')).toMatchObject({ group: 'prices', min: 0, max: 50 });
     expect(settingOf('slotWorth')).toMatchObject({ group: 'prices', min: 0, max: 5 });
     expect(settingOf('storeAdjust')).toMatchObject({ group: 'inventory', min: -50, max: 100 });
-    expect(settingOf('bulkOffer')).toMatchObject({ group: 'inventory', min: 1, max: 300 });
     expect(settingOf('interval')).toMatchObject({ group: 'screen', min: 0.4, max: 5, unit: 's' });
   });
 
@@ -56,8 +55,8 @@ describe('sanitizeSettings', () => {
   });
 
   it('clamps numbers to their limits', () => {
-    const s = sanitizeSettings({ discount: -50, fee: 500, interval: 0.01, minProfit: -1, storeAdjust: 1000, bulkOffer: 0 });
-    expect(s).toMatchObject({ discount: 5, fee: 20, interval: 0.4, minProfit: 0, storeAdjust: 100, bulkOffer: 1 });
+    const s = sanitizeSettings({ discount: -50, fee: 500, interval: 0.01, minProfit: -1, storeAdjust: 1000 });
+    expect(s).toMatchObject({ discount: 5, fee: 20, interval: 0.4, minProfit: 0, storeAdjust: 100 });
   });
 
   it('puts back the default for what is not a value of the setting', () => {

@@ -3,7 +3,7 @@ import { appraise, appraiseEntry } from '../src/appraisal/appraise';
 import { entryFor } from '../src/appraisal/entries';
 import type { AppraisalEntry, TooltipRead } from '../src/lib/types';
 import {
-  inventoryMeta, inventoryRowHtml, inventoryRowsHtml, inventorySteps, inventoryTotals, offerAsk, shownLines,
+  inventoryMeta, inventoryRowHtml, inventoryRowsHtml, inventorySteps, inventoryTotals, scanLabel, shownLines,
 } from '../src/ui/inventoryHtml';
 import { engine } from './helpers/market';
 
@@ -116,7 +116,8 @@ describe('the need-a-count filter', () => {
     expect(inventoryMeta(r)).toEqual({ items: '5 items', need: '2 need a count', noPrice: '1 has no price' });
     expect(inventoryMeta(appraise(e, [entry('Mystery Thing')], 'fair'))).toEqual({ items: '1 item', need: '1 needs a count', noPrice: '1 has no price' });
     expect(inventoryMeta(appraise(e, [entry('Lemona')], 'fair')).need).toBeNull();
-    expect(inventoryMeta(appraise(e, [], 'fair'))).toEqual({ items: 'No items yet', need: null, noPrice: '' });
+    // with nothing in it the head says nothing: the empty line under the toolbar says it
+    expect(inventoryMeta(appraise(e, [], 'fair'))).toEqual({ items: '', need: null, noPrice: '' });
   });
 });
 
@@ -135,25 +136,24 @@ describe('inventoryTotals', () => {
   });
 });
 
-describe('the offer for everything', () => {
-  it('is the worth at the offer percent', () => {
-    expect(offerAsk(appraise(e, [entry('Lemona', 2), entry('Traus')], 'fair', 90))).toBe("You'd ask 87,300");
+describe('the scan button', () => {
+  it('says Pause while scanning, Resume after you paused, else Scan my items', () => {
+    expect(scanLabel(true, false)).toBe('Pause');
+    expect(scanLabel(false, true)).toBe('Resume');
+    expect(scanLabel(false, false)).toBe('Scan my items');
   });
 });
 
 describe('the Inventory Get started steps', () => {
-  const act = { openPrices() {}, startCapture() {} };
+  const act = { openPrices() {} };
   const done = (s: Parameters<typeof inventorySteps>[0]) => inventorySteps(s, act).map((x) => x.done);
 
-  it('are the three steps, ticked off as they are done', () => {
-    const steps = inventorySteps({ prices: 0, capturing: false, items: 0 }, act);
-    expect(steps.map((x) => x.label)).toEqual(['Load market prices', 'Start capture', 'Press Scan my items and point at your items']);
-    expect(steps.map((x) => x.action?.label ?? null)).toEqual(['Go to Prices', 'Start capture', null]);
-    expect(done({ prices: 0, capturing: false, items: 0 })).toEqual([false, false, false]);
-    expect(done({ prices: 7, capturing: true, items: 0 })).toEqual([true, true, false]);
-  });
-
-  it('count capture as started once you have an item', () => {
-    expect(done({ prices: 7, capturing: false, items: 2 })).toEqual([true, true, true]);
+  it('are two steps, ticked off as they are done: Scan my items starts the capture itself', () => {
+    const steps = inventorySteps({ prices: 0, items: 0 }, act);
+    expect(steps.map((x) => x.label)).toEqual(['Load market prices', 'Press Scan my items and point at your items in the game']);
+    expect(steps.map((x) => x.action?.label ?? null)).toEqual(['Go to Prices', null]);
+    expect(done({ prices: 0, items: 0 })).toEqual([false, false]);
+    expect(done({ prices: 7, items: 0 })).toEqual([true, false]);
+    expect(done({ prices: 7, items: 2 })).toEqual([true, true]);
   });
 });

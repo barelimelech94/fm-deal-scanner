@@ -44,6 +44,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* the scrollbar's room is always kept, so a tab that scrolls doesn't shift the page sideways against one that doesn't */
+html { scrollbar-gutter: stable; }
 body {
   background: var(--bg); color: var(--ink);
   font: 15px/1.5 var(--f-body);
@@ -80,9 +82,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tab:hover { color: var(--ink); }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .tab:focus-visible { outline-offset: -4px; border-radius: 6px; }
-.tab.gear { font-size: 1.25rem; padding: 0 10px; flex: none; }
+.tab .gear { margin-right: 6px; font-size: 1.05rem; }
 .capture { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
-.modechip { flex: none; font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .btn {
   border: 1px solid var(--line); background: var(--panel); border-radius: 9px;
   padding: 7px 14px; cursor: pointer; font-weight: 700; font-size: .9rem; line-height: 1.3; white-space: nowrap;
@@ -103,9 +104,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 5px 12px 5px 10px; font-size: .86rem; line-height: 1.25; color: var(--muted);
 }
 .status #statusText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-/* the mode is the open view's own on Deals and Inventory: the tab says it already */
-body:has(#tab-deals[aria-selected="true"]) .modechip[data-mode="deals"],
-body:has(#tab-inventory[aria-selected="true"]) .modechip[data-mode="inventory"] { display: none; }
 /* under 1240px the coin stands for the name, so the status line has room */
 @media (max-width: 1239px) {
   .brand h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -157,18 +155,7 @@ main { max-width: 1320px; margin: 0 auto; }
 .step.done .n { background: var(--deal-bg); border-color: var(--deal); color: var(--deal); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-/* The deal rules, as a sentence with their three settings in it; Inventory's List at and Offer are sentences too */
-.rules { margin: 0 18px 12px; font-size: .9rem; color: var(--muted); }
-.sentence { font-size: .9rem; color: var(--muted); }
-.rules .inline, .sentence .inline {
-  width: 3.4em; padding: 2px 6px; margin: 0 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2);
-  color: var(--ink); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums;
-}
-.rules .inline.wide { width: 6.5em; }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--focus); font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.bell { font-size: .95rem; line-height: 1.2; padding-inline: 8px; }
-.bell[aria-pressed="true"]::before { content: "🔔"; }
-.bell[aria-pressed="false"]::before { content: "🔕"; opacity: .6; }
 
 /* Deal banner: the one loud thing on the page */
 .banner {
@@ -252,12 +239,14 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .deals .p { color: var(--deal); font: 800 1.05rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
 .dealscroll { max-height: 330px; overflow: auto; }
 
-/* Inventory: what you are worth and what your store asks, then your items with their List at price */
+/* Inventory: what you are worth and what your store asks (with the button that copies the store's prices), then
+   your items with their List at price */
 .view.two > .inv { grid-column: 1 / -1; }
 .invmeta .sep::before { content: "·"; margin: 0 6px; }
 #apNeedCount[aria-pressed="true"] { text-decoration: none; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 #apNeedCount[aria-pressed="true"]::after { content: " ×"; }
-.invtotals { display: flex; flex-wrap: wrap; gap: 4px 48px; margin: 2px 0 2px; }
+.invtotals { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 48px; margin: 2px 0 2px; }
+.invtotals .btn { margin-bottom: 6px; }
 .invtotals > div { display: grid; }
 .invtotals .dim { font-size: .86rem; font-weight: 700; }
 .invtotals b { font: 800 2.1rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
@@ -265,6 +254,9 @@ tr.v-sold .nm-n { text-decoration: line-through; }
 .aptoolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 6px; }
 #apClear { margin-left: auto; }
 .aphint { margin: 2px 0 8px; }
+#apMsg { margin: 0 0 8px; }
+/* Add by name: opens under the toolbar, where the button is */
+.addbox { display: grid; gap: 8px; margin: 2px 0 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-q); }
 .aphint.bad { color: var(--high); }
 .invtable { max-height: 560px; overflow: auto; }
 /* the buttons hug the right edge; the spare width goes to the columns with numbers */
@@ -282,23 +274,6 @@ tr.last td:first-child { box-shadow: inset 3px 0 0 var(--new); }
 .cellinput.list { width: 104px; font-weight: 800; font-size: .95rem; border-color: var(--muted); background: var(--panel); }
 .chip.need { background: var(--accent-soft); color: var(--accent); }
 #apTable .sub.rough { color: var(--accent); font-weight: 700; }
-.pricerow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
-.pricerow .lbl { color: var(--muted); }
-.seg { position: relative; display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel-2); }
-.seg label { cursor: pointer; }
-.seg input { position: absolute; opacity: 0; pointer-events: none; }
-.seg span { display: block; padding: 4px 14px; font-weight: 700; color: var(--muted); }
-.seg label + label span { border-left: 1px solid var(--line); }
-.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
-.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -2px; }
-details.sell > summary { cursor: pointer; list-style: none; padding: 14px 18px; display: flex; align-items: center; gap: 8px; }
-details.sell > summary::-webkit-details-marker { display: none; }
-details.sell > summary::before { content: "▸"; color: var(--muted); }
-details.sell[open] > summary::before { content: "▾"; }
-details.sell > summary h2 { display: inline; }
-details.sell[open] > summary { padding-bottom: 10px; }
-.offer { font: 800 1.5rem/1.1 var(--f-display); font-variant-numeric: tabular-nums; }
-.apquote output { display: inline-block; padding: 6px 12px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--line); font-weight: 700; user-select: all; }
 
 /* Price book */
 .note.legend { max-width: none; }
@@ -319,9 +294,9 @@ details.more > * + * { margin-top: 8px; }
 .setting-text label { font-weight: 700; font-size: .92rem; }
 .help { color: var(--muted); font-size: .8rem; line-height: 1.35; }
 .setting-control { display: grid; grid-template-columns: auto 5.5em; align-items: center; gap: 8px; justify-items: end; }
-.setting-control input[type="number"] { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.setting-control input[type="number"], .setting-control input[type="text"] { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
 .setting-control select { min-width: 110px; }
-.setting-control input[type="number"], .setting-control select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.setting-control input[type="number"], .setting-control input[type="text"], .setting-control select { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .setting-control .unit { justify-self: start; color: var(--muted); font-size: .8rem; line-height: 1.2; }
 .switch { appearance: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background .15s; }
 .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }

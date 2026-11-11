@@ -58,7 +58,6 @@ export const SETTINGS: readonly SettingDef[] = [
     options: [{ value: 'fair', label: 'Market' }, { value: 'greedy', label: 'Asking' }],
   },
   { key: 'storeAdjust', group: 'inventory', label: 'List at', help: 'What to put an item in your store at, against its price.', ...num(-50, 100, 1, '%') },
-  { key: 'bulkOffer', group: 'inventory', label: 'Offer for everything', help: 'The share of the worth you offer or ask for taking everything at once.', ...num(1, 300, 1, '%') },
   {
     key: 'appraisalArea', group: 'inventory', label: 'Count hovers', help: 'Count every hovered item, or only those beside the area you marked.', kind: 'select',
     options: [{ value: 'any', label: 'Anywhere' }, { value: 'marked', label: 'Only near the marked area' }],

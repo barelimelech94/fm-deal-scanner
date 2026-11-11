@@ -48,8 +48,6 @@ export interface Settings {
   appraisalMode: AppraisalMode;
   /** count a hover anywhere, or only near the area you marked */
   appraisalArea: 'any' | 'marked';
-  /** % of the appraisal's total you offer or ask for taking everything */
-  bulkOffer: number;
   /** what the scanner looks for; opening the Deals or the Inventory view sets it */
   mode: ScanMode;
   /** the view shown last */
@@ -61,7 +59,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   discount: 25, minProfit: 3000, fee: 3, base: 'median', minSeen: 3, interval: 0.8, sound: true,
   market: 'on', area: 'auto', readStats: 'on', statPct: 8, slotWorth: 1,
-  npcRatio: 50, shopSort: 'best', shopSortDir: 1, appraisalMode: 'fair', appraisalArea: 'any', bulkOffer: 100,
+  npcRatio: 50, shopSort: 'best', shopSortDir: 1, appraisalMode: 'fair', appraisalArea: 'any',
   mode: 'deals', view: 'deals', storeAdjust: 0,
 };
 

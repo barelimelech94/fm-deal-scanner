@@ -72,8 +72,8 @@ export class App {
     this.scanner = new Scanner(canvasAdapter, this.reader, this.session, e, { onBook: () => this.saveBook() });
     this.inventory = new InventoryView({
       engine: e, store: this.store, failed, region: () => this.itemsRegion, setScanning: (on) => this.setScanning(on),
-      shown: shown('inventory'), version: () => String(this.data), capturing: () => this.capture.active,
-      openPrices: () => this.shell.show('prices'), startCapture: () => this.startCapture(), overlay: () => this.overlay.render(),
+      paused: () => this.controller.paused, shown: shown('inventory'), version: () => String(this.data), capturing: () => this.capture.active,
+      openPrices: () => this.shell.show('prices'), overlay: () => this.overlay.render(),
     });
     this.controller = new ScanController({
       engine: e, capture: this.capture, reader: this.reader, repeat: (tick) => new Ticker(tick),
@@ -92,7 +92,7 @@ export class App {
     });
     this.overlay = new Overlay({
       engine: e, session: this.session, failed, mode: () => this.controller.mode, capturing: () => this.capture.active,
-      scanning: () => this.inventory.scanning, rows: () => this.deals.rows(), inventory: () => this.inventory.glance(),
+      scanning: () => this.inventory.scanning, paused: () => this.controller.paused, rows: () => this.deals.rows(), inventory: () => this.inventory.glance(),
       setMode: (m) => this.shell.followMode(m), toggleScanning: () => this.inventory.toggleScanning(), iconFailed: (img) => this.iconFailed(img),
     });
     this.prices = new PricesView({
@@ -210,9 +210,11 @@ export class App {
     void this.controller.startCapture();
   }
 
-  private setScanning(on: boolean): boolean {
+  /** Scan my items, Pause or Resume. Scanning with nothing shared starts the capture, which turns scanning on. */
+  private setScanning(on: boolean): void {
     this.chime.unlock();
-    return this.controller.setScanning(on);
+    if (on && !this.controller.canScan) { this.startCapture(); return; }
+    this.controller.setScanning(on);
   }
 
   async loadScreenshot(f: File): Promise<void> {

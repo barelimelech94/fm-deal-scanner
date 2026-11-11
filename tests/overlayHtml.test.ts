@@ -73,6 +73,10 @@ describe('the overlay in inventory mode', () => {
     expect(paused).toContain('<button class="btn primary" data-act="scan" aria-pressed="false">Scan my items</button>');
     expect(paused).toContain('Press Scan my items, then point at your items in the game.');
     expect(overlayHtml({ ...state, mode: 'inventory', scanning: true, inventory: glance(null) }, e.market)).toContain('Point at an item in the game.');
+    // after you paused, it asks you to resume
+    const resume = overlayHtml({ ...state, mode: 'inventory', paused: true, inventory: glance(null) }, e.market);
+    expect(resume).toContain('<button class="btn primary" data-act="scan" aria-pressed="false">Resume</button>');
+    expect(resume).toContain('Press Resume, then point at your items in the game.');
   });
 
   it('says so for an item with no price, and escapes names', () => {

@@ -31,8 +31,8 @@ export interface DealsDeps {
 }
 
 /**
- * The Deals view: Get started until it is done, then the open shop with the deal rules, its deal banner and
- * hovered item, and the deals found this session.
+ * The Deals view: Get started until it is done, then the open shop with its deal banner and hovered item, and
+ * the deals found this session. The deal rules are in Settings → Deals.
  */
 export class DealsView {
   private readonly gate = new DrawGate();
@@ -138,5 +138,6 @@ export class DealsView {
   private renderDeals(): void {
     setHtml($('dealList'), dealsHtml(this.d.session.deals, this.d.engine.market, this.d.failed));
     setHidden($('dealsEmpty'), this.d.session.deals.length > 0);
+    $<HTMLButtonElement>('btnClearDeals').disabled = !this.d.session.deals.length;
   }
 }
