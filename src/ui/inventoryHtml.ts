@@ -79,7 +79,7 @@ export function inventoryTotals(r: AppraisalResult, storeAdjust: number): Invent
 export interface InventoryMeta { items: string; need: string | null; noPrice: string }
 
 export function inventoryMeta(r: AppraisalResult): InventoryMeta {
-  if (!r.kinds && !r.ignored) return { items: 'No items yet', need: null, noPrice: '' };
+  if (!r.kinds && !r.ignored) return { items: '', need: null, noPrice: '' };
   const need = r.lines.filter(needsCount).length;
   return {
     items: plural(r.kinds, 'item', 'items'),
@@ -88,27 +88,24 @@ export function inventoryMeta(r: AppraisalResult): InventoryMeta {
   };
 }
 
-/** The offer for everything at once, in words: "You'd ask 296,998". */
-export const offerAsk = (r: AppraisalResult): string => `You'd ask ${fmt(r.quote)}`;
-
 /** What the Inventory view's Get started steps are worked out from. */
 export interface InventorySetupState {
   /** market prices loaded */
   prices: number;
-  capturing: boolean;
   /** items in the list */
   items: number;
 }
 
-/** The Inventory view's Get started steps. Capture counts as started once you have an item. */
-export function inventorySteps(s: InventorySetupState, act: { openPrices(): void; startCapture(): void }): SetupStep[] {
-  const items = s.items > 0;
+/** The Inventory view's Get started steps. Scan my items starts the capture itself, so there is no step for it. */
+export function inventorySteps(s: InventorySetupState, act: { openPrices(): void }): SetupStep[] {
   return [
     { label: 'Load market prices', done: s.prices > 0, action: { label: 'Go to Prices', run: act.openPrices } },
-    { label: 'Start capture', done: s.capturing || items, action: { label: 'Start capture', run: act.startCapture } },
-    { label: 'Press Scan my items and point at your items', done: items },
+    { label: 'Press Scan my items and point at your items in the game', done: s.items > 0 },
   ];
 }
+
+/** The scan button: Pause while scanning, Resume after you paused, else Scan my items (which starts capture if need be). */
+export const scanLabel = (scanning: boolean, paused: boolean): string => (scanning ? 'Pause' : paused ? 'Resume' : 'Scan my items');
 
 /** What the overlay shows of your items: the line hovered last (if it is still there), the worth and how many items. */
 export function inventoryGlance(r: AppraisalResult, o: { lastId: string | null; storeAdjust: number; market: MarketIndex; hint: string }): InventoryGlance {

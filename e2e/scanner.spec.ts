@@ -219,21 +219,40 @@ test('keeps your data from the single-file scanner', async ({ page }) => {
   await expect(page.locator('#bookTable tbody tr', { hasText: 'Lemona' })).toHaveCount(1);
 });
 
-test('values a pile of items typed in, offers it all at once, and keeps it', async ({ page }) => {
+test('values a pile of items typed in, copies the store prices, and keeps it', async ({ page }) => {
   const { errors } = await open(page);
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
   await expect(page.locator('#marketMsg')).toContainText('7 market prices for Windia now');
   await view(page, 'inventory');
-  await expect(page.locator('#apMeta')).toHaveText('No items yet');
+  // empty: one line says so, and no totals of 0
+  await expect(page.locator('#apMeta')).toHaveText('');
+  await expect(page.locator('#apTotals')).toBeHidden();
   await expect(page.locator('#apEmpty')).toBeVisible();
+  // no offer for everything at once, and no settings on the view: they are in Settings
+  await expect(page.locator('#view-inventory')).not.toContainText(/sell everything|offer/i);
+  await expect(page.locator('#view-inventory [data-setting]')).toHaveCount(0);
 
+  // + Add by name opens its box under the toolbar, focused; Esc and Cancel close it
+  await expect(page.locator('#apAddBox')).toBeHidden();
   await page.click('#apAddOpen');
+  await expect(page.locator('#apAddBox')).toBeVisible();
+  await expect(page.locator('#apAddOpen')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#apAdd')).toBeFocused();
+  await page.press('#apAdd', 'Escape');
+  await expect(page.locator('#apAddBox')).toBeHidden();
+  await expect(page.locator('#apAddOpen')).toBeFocused();
+  await page.click('#apAddOpen');
+  await page.click('#apAddCancel');
+  await expect(page.locator('#apAddBox')).toBeHidden();
+  await page.click('#apAddOpen');
   await page.fill('#apAdd', 'Cape INT Scroll: Lesser x3\nShoes Speed Scroll: Chaos x5\nLemona\nWolbi Throwing Stars x2\nMystery Thing x4');
   await page.click('#apAddBtn');
   await expect(page.locator('#apBody tr')).toHaveCount(5);
   await expect(page.locator('#apMsg')).toHaveText('Added 5 items.');
+  // all read: the box closes
+  await expect(page.locator('#apAddBox')).toBeHidden();
+  await expect(page.locator('#apTotals')).toBeVisible();
   // in the order they were added
   expect((await page.locator('#apBody .nm-n').allTextContents()).map((n) => n.trim()))
     .toEqual(['Cape INT Scroll: Lesser', 'Shoes Speed Scroll: Chaos', 'Lemona', 'Wolbi Throwing Stars', 'Mystery Thing']);
@@ -254,32 +273,27 @@ test('values a pile of items typed in, offers it all at once, and keeps it', asy
   await expect(page.locator('#apNoPrice')).toBeHidden();
   await expect(page.locator('#apBody tr', { hasText: 'Mystery Thing' }).locator('.chip')).toHaveText('Priced');
 
-  // offer 90% of everything, from the closed Sell everything at once card
-  await expect(page.locator('#apBulk')).toBeHidden();
-  await page.click('#apSell summary');
-  await page.fill('#apBulk', '90');
-  await page.press('#apBulk', 'Tab');
-  await expect(page.locator('#apOffer')).toHaveText("You'd ask 296,998");
-  await expect(page.locator('#apQuote')).toHaveText('15 items for 296,998 mesos');
-  await page.click('#apCopy');
-  await expect(page.locator('#apMsg')).toHaveText('Copied the offer.');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('15 items for 296,998 mesos');
+  // Copy store prices, beside the store's total: what to type in the store, one line per item
+  await page.click('#apCopyStore');
+  await expect(page.locator('#apMsg')).toHaveText('Copied the store prices.');
+  const copied = (await page.evaluate(() => navigator.clipboard.readText())).split('\n');
+  expect(copied).toHaveLength(5);
+  expect(copied[2]).toBe('Lemona ×1: 21,000');
 
-  // a skipped line is left out of the worth; Asking reads the same without sightings
+  // a skipped line is left out of the worth; Asking (in Settings) reads the same without sightings
   await page.locator('#apBody tr', { hasText: 'Lemona' }).locator('button[data-act="skip"]').click();
   await expect(page.locator('#apTotal')).toHaveText('308,998');
   await expect(page.locator('#apMeta')).toHaveText('4 items');
   await expect(page.locator('#apLeft')).toHaveText('1 skipped');
-  await page.click('.seg label:has-text("Asking")');
-  await expect(page.locator('input[name="apMode"][value="greedy"]')).toBeChecked();
+  await view(page, 'settings');
+  await page.selectOption('#set-appraisalMode', 'greedy');
+  await view(page, 'inventory');
   await expect(page.locator('#apTotal')).toHaveText('308,998');
 
   // all of it is still there after a reload
   await page.reload();
   await expect(page.locator('#apBody tr')).toHaveCount(5);
   await expect(page.locator('#apTotal')).toHaveText('308,998');
-  await expect(page.locator('input[name="apMode"][value="greedy"]')).toBeChecked();
-  await expect(page.locator('#apBulk')).toHaveValue('90');
   await expect(page.locator('#apBody tr', { hasText: 'Lemona' }).locator('.chip')).toHaveText('Skipped');
   await view(page, 'settings');
   await expect(page.locator('#set-appraisalMode')).toHaveValue('greedy');
@@ -294,7 +308,8 @@ test('values a pile of items typed in, offers it all at once, and keeps it', asy
   await page.click('#apClear');
   await expect(page.locator('#apBody tr')).toHaveCount(0);
   await expect(page.locator('#apClear')).toHaveText('Clear');
-  await expect(page.locator('#apMeta')).toHaveText('No items yet');
+  await expect(page.locator('#apMeta')).toHaveText('');
+  await expect(page.locator('#apTotals')).toBeHidden();
   await expect(page.locator('#apEmpty')).toBeVisible();
   // nothing a player reads calls it an appraisal, or counts kinds
   expect(await page.locator('#view-inventory').innerText()).not.toMatch(/apprais|kinds/i);
@@ -355,11 +370,19 @@ test('adds the items you hover to your inventory, and only while scanning', asyn
   const rows = page.locator('#apBody tr');
   await view(page, 'inventory');
 
-  // nothing to scan yet: scanning can't start
+  // nothing shared yet: Scan my items starts the capture, and scanning with it, in one press
   await page.click('#apScan');
-  await expect(page.locator('#apHint')).toContainText('Start the screen capture first');
-  await expect(page.locator('#apScan')).toHaveText('Scan my items');
+  await expect(page.locator('#btnStop')).toBeVisible();
+  await expect(page.locator('#apScan')).toHaveText('Pause');
+  await expect(page.locator('#apScan')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#statusText')).toContainText('Scanning your items');
+  // paused while the share runs: the button says Resume, and so does the status line
+  await page.click('#apScan');
+  await expect(page.locator('#apScan')).toHaveText('Resume');
   await expect(page.locator('#apScan')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#statusText')).toContainText('Paused');
+  await page.click('#btnStop');
+  await expect(page.locator('#apScan')).toHaveText('Scan my items');
 
   // a screenshot to scan, then start: the scroll under the mouse is added, with its count flagged for typing
   await loadShot(page, screen('use-scroll-inventory'));
@@ -484,17 +507,15 @@ test('sets up your store: the item hovered last stands out with its List at pric
   await expect(page.locator('#apBody tr.last')).toHaveCount(1);
   await expect(page.locator('#apTotal')).toHaveText('29,499');
 
-  // List at 10% over: each List at price and In your store follow; the worth stays
-  await page.fill('#apAdjust', '+10');
-  await page.press('#apAdjust', 'Tab');
-  await expect(page.locator('#apAdjust')).toHaveValue('10');
+  // List at 10% over, in Settings: each List at price and In your store follow; the worth stays
+  await view(page, 'settings');
+  await page.fill('#set-storeAdjust', '10');
+  await page.press('#set-storeAdjust', 'Tab');
+  await view(page, 'inventory');
   await expect(listAt(0)).toHaveValue('2,200');
   await expect(listAt(1)).toHaveValue('30,249');   // 27,499 × 1.1
   await expect(page.locator('#apStore')).toHaveText('32,449');
   await expect(page.locator('#apTotal')).toHaveText('29,499');
-  await view(page, 'settings');
-  await expect(page.locator('#set-storeAdjust')).toHaveValue('10');
-  await view(page, 'inventory');
 
   // a price typed in List at is that item's own price, as typed
   await listAt(0).fill('2,500');
@@ -656,26 +677,36 @@ test('shows one view at a time, by tab, by address and by keyboard, and remember
   const shown = () => page.locator('[role="tabpanel"]:not([hidden])');
   await expect(shown()).toHaveAttribute('id', 'view-deals');
   await expect(page.locator('#tab-deals')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#captureMode')).toHaveText('Deals');
+  const mode = () => page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!).mode as string);
+  // Settings is a tab in the row like the others, as tall and labelled
+  await expect(page.locator('[role="tablist"] [role="tab"]')).toHaveText(['Deals', 'Inventory', 'Prices', '⚙Settings']);
+  const deals = (await page.locator('#tab-deals').boundingBox())!, gear = (await page.locator('#tab-settings').boundingBox())!;
+  expect(gear.height).toBe(deals.height);
+  expect(gear.width).toBeGreaterThan(deals.width);
+  // nothing in the bar moves from one view to the next, and the page keeps the scrollbar's room either way
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter)).toBe('stable');
+  const places = () => page.evaluate(() => ['#tab-deals', '#status', '#btnStart'].map((q) => Math.round(document.querySelector(q)!.getBoundingClientRect().x)));
+  const at = await places();
 
   // a tab: the address follows, and opening Inventory sets the mode
   await view(page, 'inventory');
   await expect(shown()).toHaveAttribute('id', 'view-inventory');
   await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveCount(1);
   expect(new URL(page.url()).hash).toBe('#inventory');
-  await expect(page.locator('#captureMode')).toHaveText('Inventory');
+  expect(await mode()).toBe('inventory');
+  expect(await places()).toEqual(at);
 
-  // the arrows move along the tabs, round the end to the gear; Settings leaves the mode alone
+  // the arrows move along the tabs, round the end; Prices and Settings leave the mode alone
   await page.focus('#tab-inventory');
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#tab-prices')).toBeFocused();
   await expect(shown()).toHaveAttribute('id', 'view-prices');
+  expect(await places()).toEqual(at);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#tab-settings')).toBeFocused();
   await expect(page.locator('#tab-settings')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#captureMode')).toHaveText('Inventory');
-  // the bar names the mode only where the open view doesn't
-  await expect(page.locator('#captureMode')).toBeVisible();
+  expect(await mode()).toBe('inventory');
+  expect(await places()).toEqual(at);
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('#tab-deals')).toBeFocused();
   await page.keyboard.press('End');
@@ -689,8 +720,7 @@ test('shows one view at a time, by tab, by address and by keyboard, and remember
   await expect(shown()).toHaveAttribute('id', 'view-prices');
   await page.evaluate(() => { location.hash = '#deals'; });
   await expect(shown()).toHaveAttribute('id', 'view-deals');
-  await expect(page.locator('#captureMode')).toHaveText('Deals');
-  await expect(page.locator('#captureMode')).toBeHidden();
+  expect(await mode()).toBe('deals');
   expect(errors).toEqual([]);
 });
 
@@ -700,7 +730,8 @@ test('the status line shows in full in a window 1000 px wide', async ({ page }) 
   const { errors } = await open(page);
   // nothing in it is cut off: its words fit the lines it shows
   const whole = () => page.locator('#statusText').evaluate((el) => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1);
-  await expect(page.locator('#statusText')).toContainText('Press Start capture and pick the MapleStory window.');
+  // idle, it says only that: the Start capture button beside it says the rest
+  await expect(page.locator('#statusText')).toHaveText('Not capturing.');
   expect(await whole()).toBe(true);
   await page.click('#btnStart');
   await expect(page.locator('#statusText')).toContainText('Watching for shops');
@@ -709,8 +740,12 @@ test('the status line shows in full in a window 1000 px wide', async ({ page }) 
   await show(screenFile('screen.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
   await expect(page.locator('#statusText')).toContainText('Shop open, 6 listings');
   expect(await whole()).toBe(true);
+  // Inventory with the share running: your items are scanned at once
   await view(page, 'inventory');
-  await expect(page.locator('#statusText')).toContainText('Not scanning your items. Press Scan my items.');
+  await expect(page.locator('#statusText')).toContainText('Scanning your items. Point at items in the game and they are added.');
+  expect(await whole()).toBe(true);
+  await page.click('#apScan');
+  await expect(page.locator('#statusText')).toContainText('Paused. Press Resume to add the items you point at.');
   expect(await whole()).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -733,17 +768,16 @@ test('keeps a setting within its limits as it is typed, and in step wherever it 
   await expect(page.locator('#set-discount')).toHaveValue('5');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 5, fee: 20, interval: 0.5, statPct: 0.5 });
 
-  // the offer is shown in Settings and in Inventory: a change in one shows in the other
-  await page.fill('#set-bulkOffer', '80');
-  await page.press('#set-bulkOffer', 'Tab');
-  await view(page, 'inventory');
-  await page.click('#apSell summary');
-  await expect(page.locator('#apBulk')).toHaveValue('80');
-  await page.fill('#apBulk', '1000');
-  await page.press('#apBulk', 'Tab');
-  await expect(page.locator('#apBulk')).toHaveValue('300');
-  await view(page, 'settings');
-  await expect(page.locator('#set-bulkOffer')).toHaveValue('300');
+  // mesos are typed the short way or with commas, and shown with their thousands apart; what can't be read leaves the setting as it was
+  const profit = page.locator('#set-minProfit');
+  await expect(profit).toHaveValue('3,000');
+  for (const [typed, kept] of [['12500', '12,500'], ['5k', '5,000'], ['12 500', '5,000'], ['1.5m', '1,500,000'], ['-1', '0']] as const) {
+    await profit.fill(typed);
+    await profit.press('Tab');
+    await expect(profit, typed).toHaveValue(kept);
+  }
+  await page.reload();
+  await expect(profit).toHaveValue('0');
   expect(errors).toEqual([]);
 });
 
@@ -803,7 +837,9 @@ test('shows Inventory its own Get started steps, until there is an item', async 
   await view(page, 'inventory');
   const card = page.locator('#invSetup'), steps = card.locator('li');
   await expect(card).toBeVisible();
-  await expect(steps.locator('.what')).toHaveText(['Load market prices', 'Start capture', 'Press Scan my items and point at your items']);
+  // Scan my items starts the capture itself: no step for it
+  await expect(steps.locator('.what')).toHaveText(['Load market prices', 'Press Scan my items and point at your items in the game']);
+  await expect(steps.getByRole('button')).toHaveText(['Go to Prices']);
   await card.getByRole('button', { name: 'Go to Prices' }).click();
   await expect(page.locator('#view-prices')).toBeVisible();
   await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
@@ -837,13 +873,17 @@ test('the overlay follows the mode, and its switch sets the mode for the page', 
   // Inventory in the overlay: the page opens Inventory, and the overlay shows your items
   await press('mode-inventory');
   await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveAttribute('id', 'view-inventory');
-  await expect(page.locator('#captureMode')).toHaveText('Inventory');
   await expect.poll(overlay).toContain('<button data-act="mode-inventory" aria-pressed="true">Inventory</button>');
   expect(await overlay()).toContain('<b>0</b><span class="dim">0 items</span>');
-  // scanning starts from the overlay, and the page knows
-  await press('scan');
+  // the share is running: scanning your items starts with the switch, and the page knows
   await expect(page.locator('#apScan')).toHaveText('Pause');
   await expect.poll(overlay).toContain('>Pause</button>');
+  // paused from the overlay: both say Resume, and it resumes from there too
+  await press('scan');
+  await expect(page.locator('#apScan')).toHaveText('Resume');
+  await expect.poll(overlay).toContain('>Resume</button>');
+  await press('scan');
+  await expect(page.locator('#apScan')).toHaveText('Pause');
   // items added on the page show in the overlay's worth
   await page.click('#apAddOpen');
   await page.fill('#apAdd', 'Lemona x2');
@@ -853,63 +893,47 @@ test('the overlay follows the mode, and its switch sets the mode for the page', 
   // on Prices, the switch sets the mode and the page stays where it is
   await view(page, 'prices');
   await press('mode-deals');
-  await expect(page.locator('#captureMode')).toHaveText('Deals');
   await expect(page.locator('[role="tabpanel"]:not([hidden])')).toHaveAttribute('id', 'view-prices');
   await expect.poll(overlay).toContain('<button data-act="mode-deals" aria-pressed="true">Deals</button>');
+  await expect(page.locator('#statusText')).toContainText('Watching for shops');
   await page.reload();
-  await expect(page.locator('#captureMode')).toHaveText('Deals');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!).mode)).toBe('deals');
   expect(errors).toEqual([]);
 });
 
-test('the deal rules in the Open shop sentence and the bell are the settings in Settings → Deals', async ({ page }) => {
+test('the deal rules and the chime are set in Settings only, and Clear waits for a deal', async ({ page }) => {
   const { errors } = await open(page);
-  const rule = (key: string) => page.locator(`.rules [data-setting="${key}"]`);
-  await expect(page.locator('.rules')).toHaveText(/Flag listings\s+% under usual that make\s+mesos after a\s+% fee\./);
-  await expect(rule('discount')).toHaveValue('25');
-  await expect(rule('minProfit')).toHaveValue('3,000');
-  await expect(rule('fee')).toHaveValue('3');
+  // no settings on the Deals view: no rules sentence, no bell
+  await expect(page.locator('#view-deals [data-setting]')).toHaveCount(0);
+  await expect(page.locator('#view-deals')).not.toContainText('Flag listings');
+  await expect(page.locator('#btnClearDeals')).toBeDisabled();
 
-  // changed in the sentence, it shows in Settings, within its limits
-  await rule('discount').fill('40');
-  await rule('discount').press('Tab');
-  await rule('minProfit').fill('12500');
-  await rule('minProfit').press('Tab');
-  await expect(rule('minProfit')).toHaveValue('12,500');
-  // the short way reads as mesos; what can't be read leaves the rule as it was
-  await rule('minProfit').fill('5k');
-  await rule('minProfit').press('Tab');
-  await expect(rule('minProfit')).toHaveValue('5,000');
-  await rule('minProfit').fill('12 500');
-  await rule('minProfit').press('Tab');
-  await expect(rule('minProfit')).toHaveValue('5,000');
-  await rule('minProfit').fill('12,500');
-  await rule('minProfit').press('Tab');
-  await rule('fee').fill('99');
-  await rule('fee').press('Tab');
-  await expect(rule('fee')).toHaveValue('20');
+  // set in Settings → Deals, they judge the shop
   await view(page, 'settings');
-  await expect(page.locator('#set-discount')).toHaveValue('40');
-  await expect(page.locator('#set-minProfit')).toHaveValue('12500');
-  await expect(page.locator('#set-fee')).toHaveValue('20');
-
-  // and the other way round
-  await page.fill('#set-discount', '30');
+  await page.fill('#set-discount', '40');
   await page.press('#set-discount', 'Tab');
-  await view(page, 'deals');
-  await expect(rule('discount')).toHaveValue('30');
-
-  // the bell turns the chime off and on, as the switch in Settings does
-  const bell = page.getByRole('button', { name: 'Chime on a deal' });
-  await expect(bell).toHaveAttribute('aria-pressed', 'true');
-  await bell.click();
-  await expect(bell).toHaveAttribute('aria-pressed', 'false');
-  await view(page, 'settings');
-  await expect(page.locator('#set-sound')).not.toBeChecked();
-  await page.check('#set-sound');
-  await view(page, 'deals');
-  await expect(bell).toHaveAttribute('aria-pressed', 'true');
+  await page.fill('#set-minProfit', '12,500');
+  await page.press('#set-minProfit', 'Tab');
+  await page.fill('#set-fee', '99');
+  await page.press('#set-fee', 'Tab');
+  await expect(page.locator('#set-fee')).toHaveValue('20');
+  await page.uncheck('#set-sound');
   await page.reload();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 30, minProfit: 12500, fee: 20, sound: true });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fmscan.v1.settings')!))).toMatchObject({ discount: 40, minProfit: 12500, fee: 20, sound: false });
+
+  // a deal found: Clear clears it, and is greyed again
+  await page.setInputFiles('#fileMarket', { name: 'tracker.html', mimeType: 'text/html', buffer: Buffer.from(TRACKER) });
+  await page.fill('#set-discount', '25');
+  await page.press('#set-discount', 'Tab');
+  await page.fill('#set-minProfit', '3k');
+  await page.press('#set-minProfit', 'Tab');
+  await view(page, 'deals');
+  await loadShot(page, screenFile('shop.png', placeOn(scaleBy(loadPng('shop-list.png'), 0.5), 1440, 900, 400, 200)));
+  await expect(page.locator('#dealList li')).not.toHaveCount(0);
+  await expect(page.locator('#btnClearDeals')).toBeEnabled();
+  await page.click('#btnClearDeals');
+  await expect(page.locator('#dealList li')).toHaveCount(0);
+  await expect(page.locator('#btnClearDeals')).toBeDisabled();
   expect(errors).toEqual([]);
 });
 

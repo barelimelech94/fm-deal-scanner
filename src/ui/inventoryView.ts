@@ -1,15 +1,14 @@
 import { appraise, needsCount, type AppraisalResult } from '../appraisal/appraise';
 import { addEntry, clampQty, entryFor, parseAppraisalLines } from '../appraisal/entries';
 import { HoverCollector, type HoverEvent } from '../appraisal/hovers';
-import { offerText, storePricesText } from '../appraisal/quote';
+import { storePricesText } from '../appraisal/quote';
 import type { Engine } from '../engine';
 import { parseAmount } from '../lib/text';
 import type { AppraisalData, AppraisalEntry, Region } from '../lib/types';
-import { settingOf } from '../settings/schema';
 import type { Storage } from '../store/storage';
 import { $ } from './dom';
 import {
-  inventoryGlance, inventoryMeta, inventoryRowsHtml, inventorySteps, inventoryTotals, offerAsk, shownLines,
+  inventoryGlance, inventoryMeta, inventoryRowsHtml, inventorySteps, inventoryTotals, scanLabel, shownLines,
 } from './inventoryHtml';
 import type { InventoryGlance } from './overlayHtml';
 import { DrawGate, setHidden, setHtml, setText } from './render';
@@ -21,16 +20,17 @@ export interface InventoryDeps {
   failed: ReadonlySet<string>;
   /** the area marked for items, if any */
   region(): Region | null;
-  /** turns scanning your items on or off; false when it can't start, with nothing to scan */
-  setScanning(on: boolean): boolean;
+  /** turns scanning your items on or off; on starts the screen capture first when nothing is shared */
+  setScanning(on: boolean): void;
+  /** you pressed Pause (not just "not scanning yet"): the button says Resume */
+  paused(): boolean;
   /** whether the view is the one shown */
   shown(): boolean;
   /** changes when anything that prices items changed: settings, market prices, your prices */
   version(): string;
   capturing(): boolean;
-  /** the Get started steps' buttons */
+  /** the Get started step's button */
   openPrices(): void;
-  startCapture(): void;
   /** your items changed here: the overlay, which shows them too, follows */
   overlay(): void;
 }
@@ -39,7 +39,7 @@ const CLEAR_LABEL = 'Clear', CLEAR_ASK = 'Click again to clear';
 
 /**
  * The Inventory view: your items, added by hovering them or by name, what they are worth, what to list each at in
- * your store, and an offer for everything at once.
+ * your store.
  */
 export class InventoryView {
   private data: AppraisalData;
@@ -67,7 +67,7 @@ export class InventoryView {
 
   /** Your items priced, in the order they were added. */
   result(): AppraisalResult {
-    return appraise(this.d.engine, this.data.entries, this.settings.appraisalMode, this.settings.bulkOffer);
+    return appraise(this.d.engine, this.data.entries, this.settings.appraisalMode);
   }
 
   /** Where hovers count: near the marked area, or anywhere (also while no area is marked). */
@@ -98,15 +98,8 @@ export class InventoryView {
 
   setHint(text: string, warn = false): void { this.hint = text; this.hintWarn = warn; this.edits++; }
 
-  /** Turns scanning on or off. Returns whether it is on: it can't start with nothing to scan. */
-  setScanning(on: boolean): boolean {
-    if (this.d.setScanning(on) === on) return on;
-    this.setHint('Start the screen capture first (or load a screenshot in Settings), then press Scan my items.', true);
-    this.render();
-    return false;
-  }
-
-  toggleScanning(): void { this.setScanning(!this.scanning); }
+  /** Scan my items, Pause or Resume: on starts the screen capture first when nothing is shared. */
+  toggleScanning(): void { this.d.setScanning(!this.scanning); }
 
   /** Scanning was turned on or off, here or elsewhere: the hint says what that means. */
   scanningChanged(): void {
@@ -155,9 +148,12 @@ export class InventoryView {
       this.d.overlay();
     });
     $('apNeedCount').addEventListener('click', () => { this.onlyNeedCount = !this.onlyNeedCount; this.edits++; this.render(); });
-    $('apAddOpen').addEventListener('click', () => {
-      $<HTMLDetailsElement>('apAddBox').open = true;
-      $('apAdd').focus();
+    $('apAddOpen').addEventListener('click', () => this.showAddBox($('apAddBox').hidden));
+    $('apAddCancel').addEventListener('click', () => this.showAddBox(false));
+    $('apAdd').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); this.showAddBox(false); }
+      // Ctrl/⌘+Enter adds, as the button does
+      else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('apAddBtn').click(); }
     });
 
     const table = $('apTable');
@@ -204,10 +200,10 @@ export class InventoryView {
       $('apMsg').textContent = ok.length || bad.length
         ? `Added ${ok.length} item${ok.length === 1 ? '' : 's'}.` + (bad.length ? ` Couldn't read ${bad.length} line${bad.length === 1 ? '' : 's'}: ${bad.slice(0, 2).join(' / ')}` : '')
         : 'Type or paste item names first.';
-      if (!bad.length) box.value = '';
+      // all read: the box closes; a line it couldn't read stays, to be fixed
+      if (ok.length && !bad.length) { box.value = ''; this.showAddBox(false); }
     });
 
-    $('apCopy').addEventListener('click', () => void this.copy(offerText(this.result()), 'Copied the offer.'));
     $('apCopyStore').addEventListener('click', () => void this.copy(storePricesText(this.result(), this.settings.storeAdjust), 'Copied the store prices.'));
     const clear = $('apClear'), msg = $('apMsg');
     clear.addEventListener('click', () => {
@@ -232,6 +228,15 @@ export class InventoryView {
     });
   }
 
+  /** Opens the box for adding items by name, under the toolbar and focused, or closes it (focus back on its button). */
+  private showAddBox(open: boolean): void {
+    const box = $('apAddBox'), btn = $('apAddOpen');
+    box.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) $('apAdd').focus();
+    else if (box.contains(document.activeElement)) btn.focus();
+  }
+
   /** The clipboard, where the browser allows it. */
   private async copy(text: string, done: string): Promise<void> {
     try { await navigator.clipboard.writeText(text); $('apMsg').textContent = done; }
@@ -245,21 +250,20 @@ export class InventoryView {
    */
   render(o: { force?: boolean; overTyping?: boolean } = {}): void {
     if (!this.d.shown()) return;
-    const setup = { prices: this.d.engine.market.priced, capturing: this.d.capturing(), items: this.data.entries.length };
-    const key = `${this.collector.version}|${this.edits}|${this.d.version()}|${JSON.stringify(setup)}`;
+    const setup = { prices: this.d.engine.market.priced, items: this.data.entries.length };
+    const key = `${this.collector.version}|${this.edits}|${this.d.version()}|${JSON.stringify(setup)}|${this.d.capturing()}|${this.d.paused()}`;
     if (!this.gate.due(key, o.force)) return;
-    this.steps?.render(inventorySteps(setup, { openPrices: () => this.d.openPrices(), startCapture: () => this.d.startCapture() }));
+    this.steps?.render(inventorySteps(setup, { openPrices: () => this.d.openPrices() }));
     const typing = document.activeElement instanceof HTMLInputElement && document.activeElement.closest('#apTable');
     const r = this.result(), on = this.scanning, adjust = this.settings.storeAdjust;
     const scan = $<HTMLButtonElement>('apScan');
-    setText(scan, on ? 'Pause' : 'Scan my items');
+    setText(scan, scanLabel(on, this.d.paused() && this.d.capturing()));
     scan.classList.toggle('primary', !on);
     scan.setAttribute('aria-pressed', String(on));
     $<HTMLButtonElement>('apUndo').disabled = !this.collector.canUndo;
     setText($('apHint'), this.hint);
     setHidden($('apHint'), !this.hint);
     $('apHint').classList.toggle('bad', this.hintWarn);
-    setText($('apModeNote'), settingOf('appraisalMode').help);
     // typing in a box: leave the table alone until the change is made
     if (typing && !o.overTyping) { this.gate.reset(); return; }
 
@@ -276,6 +280,8 @@ export class InventoryView {
     setHidden($('apNoPrice'), !meta.noPrice);
 
     const t = inventoryTotals(r, adjust), lines = shownLines(r, this.onlyNeedCount);
+    // the totals show once there is an item; till then the empty line says it all
+    setHidden($('apTotals'), !this.data.entries.length);
     setText($('apTotal'), t.worth);
     setText($('apStore'), t.store);
     setText($('apLeft'), t.left);
@@ -287,9 +293,6 @@ export class InventoryView {
       this.reveal = false;
       body.querySelector('tr.last')?.scrollIntoView({ block: 'nearest' });
     }
-    setText($('apOffer'), offerAsk(r));
-    setText($('apQuote'), offerText(r));
-    $<HTMLButtonElement>('apCopy').disabled = !r.kinds;
     $<HTMLButtonElement>('apCopyStore').disabled = !r.kinds;
     $<HTMLButtonElement>('apClear').disabled = !this.data.entries.length;
   }

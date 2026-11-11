@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appraise, appraiseEntry, listPrice, needsCount, storeTotal } from '../src/appraisal/appraise';
 import { addEntry, cleanEntries, clampQty, entryFor, MAX_QTY, parseAppraisalLines } from '../src/appraisal/entries';
-import { offerText, storePricesText } from '../src/appraisal/quote';
+import { storePricesText } from '../src/appraisal/quote';
 import { DEFAULT_SETTINGS, type AppraisalEntry, type TooltipRead } from '../src/lib/types';
 import { sanitizeSettings } from '../src/settings/schema';
 import { Storage } from '../src/store/storage';
@@ -19,12 +19,12 @@ const trausTip: TooltipRead = {
 };
 
 describe('appraise', () => {
-  it('adds up the lines, and offers a percentage of the total', () => {
+  it('adds up the lines', () => {
     const r = appraise(e, [
       entry('Gloves Attack Scroll: Intermediate', 2), entry('Gloves Attack Scroll: Greater'), entry('Lemona'), entry('Wolbi Throwing Stars', 2),
-    ], 'fair', 90);
+    ], 'fair');
     expect(r.lines.map((l) => l.total)).toEqual([2199998, 430000, 21000, 4998]);
-    expect(r).toMatchObject({ total: 2655996, rough: 0, unpriced: 0, ignored: 0, kinds: 4, items: 6, bulk: 90, quote: 2390396 });
+    expect(r).toMatchObject({ total: 2655996, rough: 0, unpriced: 0, ignored: 0, kinds: 4, items: 6 });
     expect(r.lines.every((l) => l.tag === 'priced' && l.src === 'market')).toBe(true);
   });
 
@@ -88,7 +88,7 @@ describe('appraise', () => {
   });
 
   it('is empty and zero with nothing in it', () => {
-    expect(appraise(e, [], 'fair')).toMatchObject({ total: 0, quote: 0, kinds: 0, items: 0 });
+    expect(appraise(e, [], 'fair')).toMatchObject({ total: 0, kinds: 0, items: 0 });
   });
 });
 
@@ -146,15 +146,8 @@ describe('entries', () => {
   });
 });
 
-describe('the offer and the store prices, as copied', () => {
+describe('the store prices, as copied', () => {
   const lines = [entry('Gloves Attack Scroll: Greater', 2), entry('Lemona'), entry('Mystery Thing', 3), entry('Traus', 1, { ignored: true })];
-
-  it('offers everything in one line for the chat', () => {
-    expect(offerText(appraise(e, lines, 'fair', 100))).toBe('6 items for 881,000 mesos (1 not priced)');
-    expect(offerText(appraise(e, lines, 'fair', 90))).toBe('6 items for 792,900 mesos (1 not priced)');
-    expect(offerText(appraise(e, [entry('Lemona')], 'fair'))).toBe('1 item for 21,000 mesos');
-    expect(offerText(appraise(e, [], 'fair'))).toBe('No items yet');
-  });
 
   it('lists what to type in the store, one line per item in the order added, skipped ones left out', () => {
     expect(storePricesText(appraise(e, lines, 'fair'), 0)).toBe([
@@ -165,8 +158,7 @@ describe('the offer and the store prices, as copied', () => {
   });
 
   it('says nothing of appraising anywhere a player reads it', () => {
-    const r = appraise(e, lines, 'greedy', 90);
-    for (const text of [offerText(r), storePricesText(r, 0), offerText(appraise(e, [], 'fair'))]) expect(text).not.toMatch(/apprais|kind/i);
+    expect(storePricesText(appraise(e, lines, 'greedy'), 0)).not.toMatch(/apprais|kind/i);
   });
 });
 
@@ -266,8 +258,8 @@ describe('Storage', () => {
     const entries = [entry('Lemona', 3), entry('Traus', 1, { tip: trausTip, ignored: true })];
     expect(st.saveAppraisal({ entries })).toBe(true);
     expect(new Storage(ls).loadAppraisal()).toEqual({ entries });
-    expect(st.saveSettings({ ...DEFAULT_SETTINGS, appraisalMode: 'greedy', bulkOffer: 90 })).toBe(true);
-    expect(new Storage(ls).loadSettings()).toMatchObject({ appraisalMode: 'greedy', bulkOffer: 90 });
+    expect(st.saveSettings({ ...DEFAULT_SETTINGS, appraisalMode: 'greedy', storeAdjust: 10 })).toBe(true);
+    expect(new Storage(ls).loadSettings()).toMatchObject({ appraisalMode: 'greedy', storeAdjust: 10 });
   });
 
   it('starts empty, and takes old settings that lack the new ones', () => {
@@ -276,12 +268,12 @@ describe('Storage', () => {
     ls.setItem('fmscan.v1.appraisal', '{broken');
     expect(st.loadAppraisal()).toEqual({ entries: [] });
     ls.setItem('fmscan.v1.settings', JSON.stringify({ discount: 30 }));
-    expect(st.loadSettings()).toMatchObject({ discount: 30, appraisalMode: 'fair', bulkOffer: 100 });
+    expect(st.loadSettings()).toMatchObject({ discount: 30, appraisalMode: 'fair', storeAdjust: 0 });
   });
 });
 
 const VIEW_DEPS = {
-  setScanning: () => false, shown: () => false, version: () => '', capturing: () => false, openPrices() {}, startCapture() {}, overlay() {},
+  setScanning() {}, paused: () => false, shown: () => false, version: () => '', capturing: () => false, openPrices() {}, overlay() {},
 };
 
 describe('InventoryView', () => {
@@ -293,9 +285,9 @@ describe('InventoryView', () => {
   };
 
   it('starts empty and keeps good settings', () => {
-    const { en, p } = panel({ appraisalMode: 'greedy', bulkOffer: 85 });
-    expect(p.result()).toMatchObject({ mode: 'greedy', bulk: 85, total: 0, kinds: 0 });
-    expect(en.settings).toMatchObject({ appraisalMode: 'greedy', bulkOffer: 85 });
+    const { en, p } = panel({ appraisalMode: 'greedy', storeAdjust: 15 });
+    expect(p.result()).toMatchObject({ mode: 'greedy', total: 0, kinds: 0 });
+    expect(en.settings).toMatchObject({ appraisalMode: 'greedy', storeAdjust: 15 });
   });
 
   it('counts hovers anywhere, or only near the marked area once one is chosen', () => {
@@ -326,9 +318,9 @@ describe('InventoryView', () => {
 
 describe('the order of your items', () => {
   it('is the order they were added in, whatever an old version saved', () => {
-    // an old version's order for your items is dropped on load, and the rest of its settings load
-    const old = sanitizeSettings({ appraisalSort: 'total', appraisalSortDir: -1, bulkOffer: 90 });
-    expect(old).toEqual({ ...DEFAULT_SETTINGS, bulkOffer: 90 });
+    // an old version's order for your items, and its offer for everything at once, are dropped on load; the rest of its settings load
+    const old = sanitizeSettings({ appraisalSort: 'total', appraisalSortDir: -1, bulkOffer: 90, storeAdjust: 5 });
+    expect(old).toEqual({ ...DEFAULT_SETTINGS, storeAdjust: 5 });
     const en = engine({ settings: old });
     const p = new InventoryView({ engine: en, store: new Storage(null), failed: new Set(), region: () => null, ...VIEW_DEPS });
     p.importEntries([{ id: 'a', key: 'lemona', name: 'Lemona', qty: 1 }, { id: 'b', key: 'gloves attack scroll greater', name: 'Gloves Attack Scroll: Greater', qty: 2 }]);

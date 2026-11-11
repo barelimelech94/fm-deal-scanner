@@ -12,10 +12,11 @@ describe('DealsView', () => {
   let now = NOW;
   const e = engine({ now: () => now });
   const setup = (over: Partial<DealsDeps> = {}) => {
-    const session = new ShopSession(e);
+    const en = over.engine ?? e;
+    const session = new ShopSession(en);
     const ran: string[] = [];
     const view = new DealsView({
-      engine: e, session, failed: new Set(), saveSettings: () => {}, overlay: () => ran.push('overlay'), shown: () => true, version: () => '',
+      engine: en, session, failed: new Set(), saveSettings: () => {}, overlay: () => ran.push('overlay'), shown: () => true, version: () => '',
       capturing: () => false, looking: () => false,
       openPrices: () => ran.push('prices'), startCapture: () => ran.push('capture'), markShop: () => ran.push('mark'), ...over,
     });
@@ -27,11 +28,21 @@ describe('DealsView', () => {
   beforeEach(() => { document.body.innerHTML = DEALS; now = NOW; });
 
   it('redraws the overlay when the deals are cleared, as their banner shows there too', () => {
-    const { session, ran } = setup();
+    // its own prices: the deal read here goes in its price book, not the one the other tests share
+    const { session, view, ran } = setup({ engine: engine({ now: () => now }) });
+    view.render(true);
+    expect(($('btnClearDeals') as HTMLButtonElement).disabled).toBe(true);   // nothing to clear yet
+    session.read([{ name: 'Traus', truncated: false, nameConf: 95, cy: null, qty: 1, price: 30000, greyed: false, unsure: false }], false);
+    expect(session.deals).toHaveLength(1);
+    view.render(true);
+    expect(($('btnClearDeals') as HTMLButtonElement).disabled).toBe(false);
     const v = session.version;
     $('btnClearDeals').click();
     expect(session.version).toBeGreaterThan(v);
+    expect(session.deals).toHaveLength(0);
     expect(ran).toEqual(['overlay']);
+    view.render(true);
+    expect(($('btnClearDeals') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('shows the Get started steps to someone new, and runs their buttons', () => {
